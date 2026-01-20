@@ -117,3 +117,38 @@ def save_tan_preferences(
 
     # Write back
     env_path.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
+
+
+def _get_session_path() -> Path:
+    """Get the path to the session file."""
+    project_root = Path(__file__).parent.parent.parent.parent
+    return project_root / ".fints_session"
+
+
+def save_client_state(data: bytes) -> None:
+    """Save client state to file for session reuse.
+
+    Args:
+        data: Serialized client state from client.deconstruct().
+    """
+    session_path = _get_session_path()
+    session_path.write_bytes(data)
+
+
+def load_client_state() -> bytes | None:
+    """Load saved client state if available.
+
+    Returns:
+        Serialized client state bytes, or None if not available.
+    """
+    session_path = _get_session_path()
+    if session_path.exists():
+        return session_path.read_bytes()
+    return None
+
+
+def clear_client_state() -> None:
+    """Remove saved client state file."""
+    session_path = _get_session_path()
+    if session_path.exists():
+        session_path.unlink()
