@@ -1,4 +1,4 @@
-# fintts-postbank
+# fints-postbank
 
 FinTS client for Postbank banking operations using the python-fints library.
 
@@ -77,5 +77,5 @@ fintts-postbank/
 ## Configuration
 
 Bank-specific constants are in `src/fintts_postbank/config/constants.py`:
-- BLZ: 36010043
+- BLZ: 12345
 - HBCI URL: https://hbci.postbank.de/banking/hbci.do
