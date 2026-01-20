@@ -13,6 +13,9 @@ class Settings:
 
     username: str
     password: str
+    tan_mechanism: str | None = None
+    tan_mechanism_name: str | None = None
+    tan_medium: str | None = None
 
 
 def get_settings() -> Settings:
@@ -40,4 +43,77 @@ def get_settings() -> Settings:
     if not password:
         raise ValueError("FINTS_PASSWORD environment variable is required")
 
-    return Settings(username=username, password=password)
+    # Load optional TAN preferences
+    tan_mechanism = os.getenv("FINTS_TAN_MECHANISM")
+    tan_mechanism_name = os.getenv("FINTS_TAN_MECHANISM_NAME")
+    tan_medium = os.getenv("FINTS_TAN_MEDIUM")
+
+    return Settings(
+        username=username,
+        password=password,
+        tan_mechanism=tan_mechanism,
+        tan_mechanism_name=tan_mechanism_name,
+        tan_medium=tan_medium,
+    )
+
+
+def _get_env_path() -> Path:
+    """Get the path to the .env file."""
+    project_root = Path(__file__).parent.parent.parent.parent
+    return project_root / ".env"
+
+
+def save_tan_preferences(
+    mechanism: str,
+    mechanism_name: str,
+    medium: str | None = None,
+) -> None:
+    """Save TAN preferences to .env file.
+
+    Updates or adds TAN preference variables in the .env file.
+
+    Args:
+        mechanism: TAN mechanism function number (e.g., "920").
+        mechanism_name: TAN mechanism name (e.g., "BestSign").
+        medium: TAN medium name (e.g., "BennyHauptHandy"), optional.
+    """
+    env_path = _get_env_path()
+
+    # Read existing content
+    if env_path.exists():
+        content = env_path.read_text(encoding="utf-8")
+        lines = content.splitlines()
+    else:
+        lines = []
+
+    # Variables to update/add
+    updates = {
+        "FINTS_TAN_MECHANISM": mechanism,
+        "FINTS_TAN_MECHANISM_NAME": mechanism_name,
+    }
+    if medium:
+        updates["FINTS_TAN_MEDIUM"] = medium
+
+    # Track which variables were updated
+    updated_vars: set[str] = set()
+
+    # Update existing lines
+    new_lines = []
+    for line in lines:
+        updated = False
+        for var_name, var_value in updates.items():
+            if line.startswith(f"{var_name}="):
+                new_lines.append(f"{var_name}={var_value}")
+                updated_vars.add(var_name)
+                updated = True
+                break
+        if not updated:
+            new_lines.append(line)
+
+    # Add missing variables
+    for var_name, var_value in updates.items():
+        if var_name not in updated_vars:
+            new_lines.append(f"{var_name}={var_value}")
+
+    # Write back
+    env_path.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
