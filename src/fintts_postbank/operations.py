@@ -73,14 +73,20 @@ def fetch_transactions(
     """
     _output(io, f"\nFetching transactions from {start_date} to {end_date}...")
 
+    print("[FINTS] Calling get_transactions...")
     response = client.get_transactions(account, start_date, end_date)
+    print(f"[FINTS] get_transactions returned: {type(response).__name__}")
 
     # Handle TAN if required
     while isinstance(response, NeedTANResponse):
+        print("[FINTS] TAN required for transactions")
         tan = handle_tan_challenge(response, io)
         response = client.send_tan(response, tan)
+        print(f"[FINTS] After TAN, response type: {type(response).__name__}")
 
+    print("[FINTS] Converting response to list...")
     transactions: list[Any] = list(response) if response else []
+    print(f"[FINTS] Converted {len(transactions)} transactions")
     _output(io, f"Found {len(transactions)} transaction(s)")
 
     return transactions
