@@ -6,7 +6,11 @@ requires-python = ">=3.12"
 dependencies = [
     "fints>=5.0.0",
     "python-dotenv>=1.0.0",
+    "telegram-bot",
 ]
+
+[tool.uv.sources]
+telegram-bot = { path = "D:\\GIT\\BenjaminKobjolke\\telegram-bot", editable = true }
 
 [project.optional-dependencies]
 dev = [

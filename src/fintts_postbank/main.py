@@ -6,14 +6,13 @@ from fintts_postbank.client import create_client, run_session
 from fintts_postbank.tan import interactive_cli_bootstrap
 
 
-def main() -> None:
-    """Main entry point."""
-    # Parse command line arguments
-    force_tan_selection = "--tan" in sys.argv
+def run_console_mode(force_tan_selection: bool) -> None:
+    """Run the FinTS client in console mode.
 
-    print("=" * 70)
-    print("POSTBANK FINTS CLIENT")
-    print("=" * 70)
+    Args:
+        force_tan_selection: Whether to force TAN mechanism selection
+    """
+    print("Postbank FinTS Client")
 
     try:
         first_run = True
@@ -36,15 +35,9 @@ def main() -> None:
             if not needs_reconnect:
                 break
 
-            print("\n" + "-" * 70)
-            print("Reconnecting to bank...")
-            print("-" * 70)
+            print("\nReconnecting...")
 
-        print("\nSession saved.")
-
-        print("\n" + "=" * 70)
-        print("GOODBYE")
-        print("=" * 70)
+        print("\nSession saved. Goodbye.")
 
     except ValueError as e:
         print(f"\nConfiguration error: {e}")
@@ -52,6 +45,27 @@ def main() -> None:
     except Exception as e:
         print(f"\nError: {e}")
         raise
+
+
+def main() -> None:
+    """Main entry point."""
+    # Parse command line arguments
+    force_tan_selection = "--tan" in sys.argv
+    telegram_mode = "--telegram" in sys.argv
+
+    if telegram_mode:
+        # Import here to avoid loading telegram dependencies in console mode
+        from fintts_postbank.telegram_mode import run_telegram_mode
+
+        try:
+            run_telegram_mode(force_tan_selection)
+        except ValueError as e:
+            print(f"\nConfiguration error: {e}")
+        except Exception as e:
+            print(f"\nError: {e}")
+            raise
+    else:
+        run_console_mode(force_tan_selection)
 
 
 if __name__ == "__main__":

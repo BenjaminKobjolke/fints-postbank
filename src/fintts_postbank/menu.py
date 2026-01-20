@@ -1,7 +1,9 @@
 """Interactive menu handling for the CLI."""
 
+from __future__ import annotations
+
 from datetime import date, timedelta
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fints.client import FinTS3PinTanClient  # type: ignore[import-untyped]
 
@@ -13,6 +15,9 @@ from fintts_postbank.operations import (
 )
 from fintts_postbank.ui import get_valid_choice
 
+if TYPE_CHECKING:
+    from fintts_postbank.io import IOAdapter
+
 PERIOD_LABELS = {
     1: "today",
     2: "this week",
@@ -20,6 +25,14 @@ PERIOD_LABELS = {
     4: "this year",
     5: "all",
 }
+
+
+def _output(io: IOAdapter | None, message: str) -> None:
+    """Output message using IOAdapter or print."""
+    if io is not None:
+        io.output(message)
+    else:
+        print(message)
 
 
 def get_transaction_date_range(choice: int) -> tuple[date, date]:
@@ -67,39 +80,45 @@ def get_last_action_label(last_action: tuple[int, int | None]) -> str | None:
     return None
 
 
-def show_transactions_menu() -> int:
+def show_transactions_menu(io: IOAdapter | None = None) -> int:
     """Display transactions period menu and get user choice.
+
+    Args:
+        io: Optional IOAdapter for I/O operations.
 
     Returns:
         User's menu choice (0-5).
     """
-    print("\nSelect time period:")
-    print("1. Today")
-    print("2. This week")
-    print("3. This month")
-    print("4. This year")
-    print("5. All")
-    print("0. Back")
-    return get_valid_choice("\nChoice: ", 5)
+    _output(io, "\nSelect time period:")
+    _output(io, "1. Today")
+    _output(io, "2. This week")
+    _output(io, "3. This month")
+    _output(io, "4. This year")
+    _output(io, "5. All")
+    _output(io, "0. Back")
+    return get_valid_choice("\nChoice: ", 5, io=io)
 
 
-def show_menu(last_action_label: str | None = None) -> int:
+def show_menu(
+    last_action_label: str | None = None,
+    io: IOAdapter | None = None,
+) -> int:
     """Display menu and get user choice.
 
     Args:
         last_action_label: Label for last action (shown as repeat hint).
+        io: Optional IOAdapter for I/O operations.
 
     Returns:
         User's menu choice (0-2), or -1 to repeat last action.
     """
-    print("\nWhat would you like to do?")
-    print("1. Show balance")
-    print("2. Show transactions")
-    print("0. Exit")
+    _output(io, "\n1. Show balance")
+    _output(io, "2. Show transactions")
+    _output(io, "0. Exit")
     if last_action_label:
-        print(f"\n[Enter] {last_action_label}")
-        return get_valid_choice("\nChoice: ", 2, default=-1)
-    return get_valid_choice("\nChoice: ", 2)
+        _output(io, f"\n[Enter] {last_action_label}")
+        return get_valid_choice("\nChoice: ", 2, default=-1, io=io)
+    return get_valid_choice("\nChoice: ", 2, io=io)
 
 
 def is_dialog_error(error: Exception) -> bool:
@@ -118,12 +137,17 @@ def is_dialog_error(error: Exception) -> bool:
     )
 
 
-def run_menu_loop(client: FinTS3PinTanClient, account: Any) -> bool:
+def run_menu_loop(
+    client: FinTS3PinTanClient,
+    account: Any,
+    io: IOAdapter | None = None,
+) -> bool:
     """Run interactive menu loop.
 
     Args:
         client: Configured FinTS client.
         account: SEPA account to operate on.
+        io: Optional IOAdapter for I/O operations.
 
     Returns:
         True if reconnection is needed, False for normal exit.
@@ -132,7 +156,7 @@ def run_menu_loop(client: FinTS3PinTanClient, account: Any) -> bool:
 
     while True:
         last_action_label = get_last_action_label(last_action)
-        choice = show_menu(last_action_label)
+        choice = show_menu(last_action_label, io)
 
         # Handle repeat last action
         if choice == -1 and last_action[0] != 0:
@@ -143,13 +167,13 @@ def run_menu_loop(client: FinTS3PinTanClient, account: Any) -> bool:
                 start_date, end_date = get_transaction_date_range(period_choice)
                 try:
                     transactions = fetch_transactions(
-                        client, account, start_date, end_date
+                        client, account, start_date, end_date, io
                     )
-                    print_transactions(transactions)
+                    print_transactions(transactions, io)
                 except Exception as e:
                     if is_dialog_error(e):
-                        print(f"\nSession expired: {e}")
-                        print("Reconnecting...")
+                        _output(io, f"\nSession expired: {e}")
+                        _output(io, "Reconnecting...")
                         return True
                     raise
                 continue
@@ -158,29 +182,29 @@ def run_menu_loop(client: FinTS3PinTanClient, account: Any) -> bool:
             return False
         elif choice == 1:
             try:
-                balance = fetch_balance(client, account)
-                print_balance(balance)
+                balance = fetch_balance(client, account, io)
+                print_balance(balance, io)
                 last_action = (1, None)
             except Exception as e:
                 if is_dialog_error(e):
-                    print(f"\nSession expired: {e}")
-                    print("Reconnecting...")
+                    _output(io, f"\nSession expired: {e}")
+                    _output(io, "Reconnecting...")
                     return True
                 raise
         elif choice == 2:
-            period_choice = show_transactions_menu()
+            period_choice = show_transactions_menu(io)
             if period_choice == 0:
                 continue
             start_date, end_date = get_transaction_date_range(period_choice)
             try:
                 transactions = fetch_transactions(
-                    client, account, start_date, end_date
+                    client, account, start_date, end_date, io
                 )
-                print_transactions(transactions)
+                print_transactions(transactions, io)
                 last_action = (2, period_choice)
             except Exception as e:
                 if is_dialog_error(e):
-                    print(f"\nSession expired: {e}")
-                    print("Reconnecting...")
+                    _output(io, f"\nSession expired: {e}")
+                    _output(io, "Reconnecting...")
                     return True
                 raise

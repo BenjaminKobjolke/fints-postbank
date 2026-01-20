@@ -18,6 +18,14 @@ class Settings:
     tan_medium: str | None = None
 
 
+@dataclass(frozen=True)
+class TelegramSettings:
+    """Telegram bot settings loaded from environment."""
+
+    bot_token: str | None = None
+    allowed_chat_ids: set[int] | None = None
+
+
 def get_settings() -> Settings:
     """Load settings from environment variables.
 
@@ -54,6 +62,40 @@ def get_settings() -> Settings:
         tan_mechanism=tan_mechanism,
         tan_mechanism_name=tan_mechanism_name,
         tan_medium=tan_medium,
+    )
+
+
+def get_telegram_settings() -> TelegramSettings:
+    """Load Telegram bot settings from environment variables.
+
+    Returns:
+        TelegramSettings object with bot token and allowed chat IDs.
+    """
+    # Find project root (where .env should be)
+    project_root = Path(__file__).parent.parent.parent.parent
+    env_path = project_root / ".env"
+
+    load_dotenv(env_path)
+
+    bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
+
+    # Parse allowed chat IDs (comma-separated list)
+    allowed_ids_str = os.getenv("TELEGRAM_ALLOWED_CHAT_IDS", "")
+    allowed_chat_ids: set[int] | None = None
+
+    if allowed_ids_str.strip():
+        try:
+            allowed_chat_ids = {
+                int(chat_id.strip())
+                for chat_id in allowed_ids_str.split(",")
+                if chat_id.strip()
+            }
+        except ValueError:
+            pass  # Invalid format, treat as no whitelist
+
+    return TelegramSettings(
+        bot_token=bot_token,
+        allowed_chat_ids=allowed_chat_ids,
     )
 
 
