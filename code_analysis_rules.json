@@ -1,0 +1,41 @@
+{
+  "log_level": "all",
+  "max_lines_per_file": {
+    "enabled": true,
+    "warning": 300,
+    "error": 500
+  },
+  "pmd_duplicates": {
+    "enabled": true,
+    "minimum_tokens": 100,
+    "exclude_patterns": {
+      "python": [
+        "__pycache__/**",
+        "*.pyc",
+        ".venv/**",
+        ".pytest_cache/**",
+        ".mypy_cache/**",
+        ".ruff_cache/**",
+        ".git/**",
+        "build/**",
+        "dist/**",
+        "*.egg-info/**"
+      ]
+    }
+  },
+  "ruff_analyze": {
+    "enabled": true,
+    "select": ["E", "F", "I", "N", "W", "UP"],
+    "ignore": [],
+    "exclude_patterns": [
+      ".venv/**",
+      "__pycache__/**",
+      ".pytest_cache/**",
+      ".mypy_cache/**",
+      ".ruff_cache/**",
+      ".git/**",
+      "build/**",
+      "dist/**"
+    ]
+  }
+}
