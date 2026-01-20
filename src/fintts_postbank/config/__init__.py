@@ -2,9 +2,11 @@
 
 from .constants import BLZ, HBCI_URL, IBAN, PRODUCT_ID
 from .settings import (
+    ApiSettings,
     Settings,
     TelegramSettings,
     clear_client_state,
+    get_api_settings,
     get_settings,
     get_telegram_settings,
     load_client_state,
@@ -13,6 +15,7 @@ from .settings import (
 )
 
 __all__ = [
+    "ApiSettings",
     "BLZ",
     "HBCI_URL",
     "IBAN",
@@ -20,6 +23,7 @@ __all__ = [
     "Settings",
     "TelegramSettings",
     "clear_client_state",
+    "get_api_settings",
     "get_settings",
     "get_telegram_settings",
     "load_client_state",

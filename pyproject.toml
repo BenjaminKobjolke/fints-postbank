@@ -5,6 +5,7 @@ description = "FinTS client for Postbank banking operations"
 requires-python = ">=3.12"
 dependencies = [
     "fints>=5.0.0",
+    "httpx>=0.27.0",
     "python-dotenv>=1.0.0",
     "telegram-bot",
 ]
@@ -18,6 +19,9 @@ dev = [
     "ruff>=0.4.0",
     "mypy>=1.10.0",
 ]
+
+[project.scripts]
+fints-postbank = "fintts_postbank.main:main"
 
 [build-system]
 requires = ["hatchling"]

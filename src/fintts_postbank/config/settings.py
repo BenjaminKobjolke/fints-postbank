@@ -2,6 +2,7 @@
 
 import os
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -24,6 +25,17 @@ class TelegramSettings:
 
     bot_token: str | None = None
     allowed_chat_ids: set[int] | None = None
+
+
+@dataclass(frozen=True)
+class ApiSettings:
+    """API settings for forecast-php integration."""
+
+    api_url: str
+    api_user: str
+    api_password: str
+    telegram_target_user_id: int
+    transaction_start_date: date
 
 
 def get_settings() -> Settings:
@@ -96,6 +108,69 @@ def get_telegram_settings() -> TelegramSettings:
     return TelegramSettings(
         bot_token=bot_token,
         allowed_chat_ids=allowed_chat_ids,
+    )
+
+
+def get_api_settings() -> ApiSettings:
+    """Load API settings from environment variables.
+
+    Returns:
+        ApiSettings object with API configuration.
+
+    Raises:
+        ValueError: If required environment variables are missing or invalid.
+    """
+    # Find project root (where .env should be)
+    project_root = Path(__file__).parent.parent.parent.parent
+    env_path = project_root / ".env"
+
+    load_dotenv(env_path)
+
+    api_url = os.getenv("API_URL")
+    api_user = os.getenv("API_USER")
+    api_password = os.getenv("API_PASSWORD")
+    telegram_target_user_id_str = os.getenv("TELEGRAM_TARGET_USER_ID")
+    transaction_start_date_str = os.getenv("TRANSACTION_START_DATE")
+
+    # Validate required fields
+    missing = []
+    if not api_url:
+        missing.append("API_URL")
+    if not api_user:
+        missing.append("API_USER")
+    if not api_password:
+        missing.append("API_PASSWORD")
+    if not telegram_target_user_id_str:
+        missing.append("TELEGRAM_TARGET_USER_ID")
+    if not transaction_start_date_str:
+        missing.append("TRANSACTION_START_DATE")
+
+    if missing:
+        raise ValueError(f"Missing required environment variables: {', '.join(missing)}")
+
+    # Parse telegram target user ID
+    try:
+        telegram_target_user_id = int(telegram_target_user_id_str)  # type: ignore[arg-type]
+    except ValueError as err:
+        raise ValueError(
+            f"TELEGRAM_TARGET_USER_ID must be an integer, got: {telegram_target_user_id_str}"
+        ) from err
+
+    # Parse transaction start date (YYYY-MM-DD format)
+    try:
+        transaction_start_date = date.fromisoformat(transaction_start_date_str)  # type: ignore[arg-type]
+    except ValueError as err:
+        raise ValueError(
+            f"TRANSACTION_START_DATE must be in YYYY-MM-DD format, "
+            f"got: {transaction_start_date_str}"
+        ) from err
+
+    return ApiSettings(
+        api_url=api_url,  # type: ignore[arg-type]
+        api_user=api_user,  # type: ignore[arg-type]
+        api_password=api_password,  # type: ignore[arg-type]
+        telegram_target_user_id=telegram_target_user_id,
+        transaction_start_date=transaction_start_date,
     )
 
 

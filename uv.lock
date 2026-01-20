@@ -147,6 +147,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "fints" },
+    { name = "httpx" },
     { name = "python-dotenv" },
     { name = "telegram-bot" },
 ]
@@ -161,6 +162,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "fints", specifier = ">=5.0.0" },
+    { name = "httpx", specifier = ">=0.27.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.10.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
     { name = "python-dotenv", specifier = ">=1.0.0" },

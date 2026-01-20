@@ -52,8 +52,14 @@ def main() -> None:
     # Parse command line arguments
     force_tan_selection = "--tan" in sys.argv
     telegram_mode = "--telegram" in sys.argv
+    update_api_mode = "--update-api" in sys.argv
 
-    if telegram_mode:
+    if update_api_mode:
+        # Import here to avoid loading dependencies in other modes
+        from fintts_postbank.update_api_mode import run_update_api_mode
+
+        sys.exit(run_update_api_mode())
+    elif telegram_mode:
         # Import here to avoid loading telegram dependencies in console mode
         from fintts_postbank.telegram_mode import run_telegram_mode
 
