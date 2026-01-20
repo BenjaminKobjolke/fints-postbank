@@ -25,6 +25,7 @@ class TelegramSettings:
 
     bot_token: str | None = None
     allowed_chat_ids: set[int] | None = None
+    allowed_user_ids: set[int] | None = None
 
 
 @dataclass(frozen=True)
@@ -92,15 +93,29 @@ def get_telegram_settings() -> TelegramSettings:
     bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
 
     # Parse allowed chat IDs (comma-separated list)
-    allowed_ids_str = os.getenv("TELEGRAM_ALLOWED_CHAT_IDS", "")
+    allowed_chat_ids_str = os.getenv("TELEGRAM_ALLOWED_CHAT_IDS", "")
     allowed_chat_ids: set[int] | None = None
 
-    if allowed_ids_str.strip():
+    if allowed_chat_ids_str.strip():
         try:
             allowed_chat_ids = {
                 int(chat_id.strip())
-                for chat_id in allowed_ids_str.split(",")
+                for chat_id in allowed_chat_ids_str.split(",")
                 if chat_id.strip()
+            }
+        except ValueError:
+            pass  # Invalid format, treat as no whitelist
+
+    # Parse allowed user IDs (comma-separated list)
+    allowed_user_ids_str = os.getenv("TELEGRAM_ALLOWED_USER_IDS", "")
+    allowed_user_ids: set[int] | None = None
+
+    if allowed_user_ids_str.strip():
+        try:
+            allowed_user_ids = {
+                int(user_id.strip())
+                for user_id in allowed_user_ids_str.split(",")
+                if user_id.strip()
             }
         except ValueError:
             pass  # Invalid format, treat as no whitelist
@@ -108,6 +123,7 @@ def get_telegram_settings() -> TelegramSettings:
     return TelegramSettings(
         bot_token=bot_token,
         allowed_chat_ids=allowed_chat_ids,
+        allowed_user_ids=allowed_user_ids,
     )
 
 

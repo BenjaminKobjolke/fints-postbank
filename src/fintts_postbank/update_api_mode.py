@@ -259,8 +259,11 @@ def _run_fints_session(
             adapter.output(f"Fetching transactions from {start_date} to {end_date}...")
 
             try:
-                transactions = fetch_transactions(client, account, start_date, end_date, adapter)
-                print(f"[API-MODE] Received {len(transactions) if transactions else 0} transactions")
+                transactions = fetch_transactions(
+                    client, account, start_date, end_date, adapter
+                )
+                tx_count = len(transactions) if transactions else 0
+                print(f"[API-MODE] Received {tx_count} transactions")
             except Exception as e:
                 print(f"[API-MODE] ERROR fetching transactions: {e}")
                 import traceback
@@ -369,6 +372,16 @@ def run_update_api_mode() -> int:
         api_settings.telegram_target_user_id,
         timeout=300,  # 5 minutes for TAN confirmation
     )
+
+    # Send startup notification to target user
+    print(f"Notifying user {api_settings.telegram_target_user_id}...")
+    try:
+        bot.reply_to_user(
+            "FinTS API sync starting. You may receive TAN challenges.",
+            api_settings.telegram_target_user_id,
+        )
+    except Exception as e:
+        print(f"Warning: Could not send startup notification: {e}")
 
     # Set up message handler for receiving TAN responses
     def on_update(update: Any) -> None:

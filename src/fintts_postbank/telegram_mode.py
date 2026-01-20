@@ -237,6 +237,18 @@ def run_telegram_mode(force_tan_selection: bool = False) -> None:
 
     print("Telegram bot started. Press Ctrl+C to stop.")
     print(f"Allowed chat IDs: {our_settings.allowed_chat_ids or 'All'}")
+    print(f"Allowed user IDs: {our_settings.allowed_user_ids or 'All'}")
+
+    # Send startup message to all allowed users
+    if our_settings.allowed_user_ids:
+        startup_message = "FinTS Bot is now online. Send /start to begin a session."
+        print(f"Sending startup notification to {len(our_settings.allowed_user_ids)} user(s)...")
+        for user_id in our_settings.allowed_user_ids:
+            try:
+                bot.reply_to_user(startup_message, user_id)
+                print(f"  - Notified user {user_id}")
+            except Exception as e:
+                print(f"  - Failed to notify user {user_id}: {e}")
 
     # Keep main thread alive until interrupted
     try:
