@@ -423,7 +423,22 @@ def run_update_api_mode() -> int:
     except KeyboardInterrupt:
         print("\nInterrupted by user.")
         return 1
-    finally:
-        bot.shutdown()
 
-    return result_container[0] if result_container else 1
+    # Send completion message to all allowed users
+    result = result_container[0] if result_container else 1
+    telegram_settings = get_telegram_settings()
+    if telegram_settings.allowed_user_ids:
+        if result == 0:
+            completion_msg = "FinTS API sync completed successfully."
+        else:
+            completion_msg = "FinTS API sync finished with errors."
+        print(f"Notifying {len(telegram_settings.allowed_user_ids)} user(s) of completion...")
+        for user_id in telegram_settings.allowed_user_ids:
+            try:
+                bot.reply_to_user(completion_msg, user_id)
+                print(f"  - Notified user {user_id}")
+            except Exception as e:
+                print(f"  - Failed to notify user {user_id}: {e}")
+
+    bot.shutdown()
+    return result
