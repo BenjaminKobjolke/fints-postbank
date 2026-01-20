@@ -14,6 +14,10 @@ FinTS client for Postbank banking operations using the python-fints library.
 - Python >= 3.12
 - [uv](https://docs.astral.sh/uv/) package manager
 
+## Dependencies
+
+This project uses [telegram-bot](https://github.com/BenjaminKobjolke/telegram-bot) for Telegram integration. It will be automatically installed from GitHub via uv.
+
 ## Setup
 
 1. Run the install script:

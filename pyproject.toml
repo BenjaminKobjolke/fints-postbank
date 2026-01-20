@@ -11,7 +11,7 @@ dependencies = [
 ]
 
 [tool.uv.sources]
-telegram-bot = { path = "D:\\GIT\\BenjaminKobjolke\\telegram-bot", editable = true }
+telegram-bot = { git = "https://github.com/BenjaminKobjolke/telegram-bot" }
 
 [project.optional-dependencies]
 dev = [
