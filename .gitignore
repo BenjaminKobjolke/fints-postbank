@@ -4,6 +4,10 @@
 *.pem
 *.key
 
+# Session and database files
+.fints_session
+.fints_transactions.db
+
 # Python
 __pycache__/
 *.py[cod]
