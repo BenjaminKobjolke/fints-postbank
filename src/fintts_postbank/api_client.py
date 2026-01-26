@@ -128,6 +128,7 @@ class ForecastApiClient:
             "name": name,
             "value": str(value),
             "dateactual": date_actual.isoformat(),
+            "status": "paid",
         }
 
         try:
