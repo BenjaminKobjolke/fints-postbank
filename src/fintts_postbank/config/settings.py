@@ -29,6 +29,18 @@ class TelegramSettings:
 
 
 @dataclass(frozen=True)
+class XmppSettings:
+    """XMPP bot settings loaded from environment."""
+
+    jid: str | None = None
+    password: str | None = None
+    default_receiver: str | None = None
+    allowed_jids: frozenset[str] | None = None
+    resource: str = "fints-bot"
+    connect_timeout: int = 30
+
+
+@dataclass(frozen=True)
 class ApiSettings:
     """API settings for forecast-php integration."""
 
@@ -124,6 +136,68 @@ def get_telegram_settings() -> TelegramSettings:
         bot_token=bot_token,
         allowed_chat_ids=allowed_chat_ids,
         allowed_user_ids=allowed_user_ids,
+    )
+
+
+def get_bot_mode() -> str:
+    """Get the bot mode from environment variable.
+
+    Returns:
+        Bot mode: "console", "telegram", or "xmpp"
+    """
+    project_root = Path(__file__).parent.parent.parent.parent
+    env_path = project_root / ".env"
+    load_dotenv(env_path)
+
+    mode = os.getenv("BOT_MODE", "console").lower().strip()
+    if mode not in ("console", "telegram", "xmpp"):
+        return "console"
+    return mode
+
+
+def get_xmpp_settings() -> XmppSettings:
+    """Load XMPP bot settings from environment variables.
+
+    Returns:
+        XmppSettings object with XMPP configuration.
+    """
+    # Find project root (where .env should be)
+    project_root = Path(__file__).parent.parent.parent.parent
+    env_path = project_root / ".env"
+
+    load_dotenv(env_path)
+
+    jid = os.getenv("XMPP_JID")
+    password = os.getenv("XMPP_PASSWORD")
+    default_receiver = os.getenv("XMPP_DEFAULT_RECEIVER")
+
+    # Parse allowed JIDs (comma-separated list)
+    allowed_jids_str = os.getenv("XMPP_ALLOWED_JIDS", "")
+    allowed_jids: frozenset[str] | None = None
+
+    if allowed_jids_str.strip():
+        allowed_jids = frozenset(
+            jid_item.strip().lower()
+            for jid_item in allowed_jids_str.split(",")
+            if jid_item.strip()
+        )
+
+    # Parse optional settings with defaults
+    resource = os.getenv("XMPP_RESOURCE", "fints-bot")
+
+    connect_timeout_str = os.getenv("XMPP_CONNECT_TIMEOUT", "30")
+    try:
+        connect_timeout = int(connect_timeout_str)
+    except ValueError:
+        connect_timeout = 30
+
+    return XmppSettings(
+        jid=jid,
+        password=password,
+        default_receiver=default_receiver,
+        allowed_jids=allowed_jids,
+        resource=resource,
+        connect_timeout=connect_timeout,
     )
 
 

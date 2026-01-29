@@ -49,22 +49,51 @@ def run_console_mode(force_tan_selection: bool) -> None:
 
 def main() -> None:
     """Main entry point."""
+    from fintts_postbank.config import get_bot_mode
+
     # Parse command line arguments
     force_tan_selection = "--tan" in sys.argv
-    telegram_mode = "--telegram" in sys.argv
     update_api_mode = "--update-api" in sys.argv
+
+    # Determine bot mode: CLI flags override env var
+    telegram_flag = "--telegram" in sys.argv
+    xmpp_flag = "--xmpp" in sys.argv
+
+    # Validate mutually exclusive CLI flags
+    if telegram_flag and xmpp_flag:
+        print("Error: --telegram and --xmpp are mutually exclusive")
+        sys.exit(1)
+
+    # CLI flags override env var
+    if telegram_flag:
+        bot_mode = "telegram"
+    elif xmpp_flag:
+        bot_mode = "xmpp"
+    else:
+        bot_mode = get_bot_mode()  # From BOT_MODE env var, defaults to "console"
 
     if update_api_mode:
         # Import here to avoid loading dependencies in other modes
         from fintts_postbank.update_api_mode import run_update_api_mode
 
         sys.exit(run_update_api_mode())
-    elif telegram_mode:
+    elif bot_mode == "telegram":
         # Import here to avoid loading telegram dependencies in console mode
         from fintts_postbank.telegram_mode import run_telegram_mode
 
         try:
             run_telegram_mode(force_tan_selection)
+        except ValueError as e:
+            print(f"\nConfiguration error: {e}")
+        except Exception as e:
+            print(f"\nError: {e}")
+            raise
+    elif bot_mode == "xmpp":
+        # Import here to avoid loading xmpp dependencies in other modes
+        from fintts_postbank.xmpp_mode import run_xmpp_mode
+
+        try:
+            run_xmpp_mode(force_tan_selection)
         except ValueError as e:
             print(f"\nConfiguration error: {e}")
         except Exception as e:

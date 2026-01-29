@@ -8,10 +8,12 @@ dependencies = [
     "httpx>=0.27.0",
     "python-dotenv>=1.0.0",
     "telegram-bot",
+    "xmpp-bot",
 ]
 
 [tool.uv.sources]
 telegram-bot = { git = "https://github.com/BenjaminKobjolke/telegram-bot" }
+xmpp-bot = { git = "https://github.com/BenjaminKobjolke/xmpp-bot.git" }
 
 [project.optional-dependencies]
 dev = [
