@@ -69,20 +69,16 @@ def _try_use_saved_preferences(
             medium_name = getattr(medium, "tan_medium_name", str(medium))
             if medium_name == settings.tan_medium:
                 client.set_tan_medium(medium)
-                # Show what's being used
-                _output(
-                    io, f"Using: {settings.tan_mechanism_name} - {settings.tan_medium}"
-                )
-                _output(io, "(use --tan to change)")
+                # Log what's being used (console only, not Telegram)
+                print(f"Using: {settings.tan_mechanism_name} - {settings.tan_medium}")
                 return True
 
         # Medium not found, need to re-select
         _output(io, f"Saved TAN medium '{settings.tan_medium}' no longer available.")
         return False
 
-    # Show what's being used (no medium)
-    _output(io, f"Using: {settings.tan_mechanism_name}")
-    _output(io, "(use --tan to change)")
+    # Log what's being used (console only, not Telegram)
+    print(f"Using: {settings.tan_mechanism_name}")
     return True
 
 

@@ -156,7 +156,6 @@ def _run_fints_session(
         Exit code (0 for success, non-zero for failure).
     """
     print("[API-MODE] Starting FinTS session...")
-    adapter.output("Starting update-api mode...")
 
     # Create API client and transaction DB
     print(f"[API-MODE] API URL: {api_settings.api_url}")
@@ -165,12 +164,10 @@ def _run_fints_session(
 
     # Create FinTS client
     print("[API-MODE] Creating FinTS client...")
-    adapter.output("Creating FinTS client...")
     client: FinTS3PinTanClient = create_client(adapter)
 
     # Bootstrap TAN mechanisms (uses saved preferences)
     print("[API-MODE] Initializing TAN mechanisms...")
-    adapter.output("Initializing TAN mechanisms...")
     interactive_cli_bootstrap(client, force_tan_selection=False, io=adapter)
 
     try:
@@ -179,7 +176,6 @@ def _run_fints_session(
             # Handle initialization TAN if needed (PSD2 requirement)
             if client.init_tan_response:
                 print("[API-MODE] TAN required for initialization")
-                adapter.output("TAN required for session initialization...")
                 tan = handle_tan_challenge(client.init_tan_response, adapter)
                 client.send_tan(client.init_tan_response, tan)
             else:
@@ -210,15 +206,13 @@ def _run_fints_session(
                 # Use first account as fallback
                 account = accounts[0]
                 print(f"[API-MODE] Using first available account: {account.iban}")
-                adapter.output(f"Using first available account: {account.iban}")
 
             print(f"[API-MODE] Using account: {account.iban}")
-            adapter.output(f"Using account: {account.iban}")
 
             # Fetch and post balance
             print("[API-MODE] Fetching balance...")
-            adapter.output("Fetching balance...")
             balance = fetch_balance(client, account, adapter)
+            balance_value: Decimal | None = None
 
             if balance and hasattr(balance, "amount"):
                 balance_amount = balance.amount
@@ -229,20 +223,16 @@ def _run_fints_session(
                     balance_value = Decimal(str(balance_amount))
 
                 print(f"[API-MODE] Balance: {balance_value}")
-                adapter.output(f"Current balance: {balance_value}")
 
                 # Post balance to API
                 print("[API-MODE] Posting balance to API...")
-                adapter.output("Posting balance to API...")
                 balance_result = api_client.post_balance(date.today(), balance_value)
 
                 if balance_result.success:
                     if balance_result.is_duplicate:
                         print("[API-MODE] Balance already recorded (duplicate)")
-                        adapter.output("Balance already recorded for today.")
                     else:
                         print("[API-MODE] Balance posted successfully!")
-                        adapter.output("Balance posted successfully.")
                 else:
                     print(f"[API-MODE] Failed to post balance: {balance_result.error_message}")
                     adapter.output(f"Failed to post balance: {balance_result.error_message}")
@@ -256,7 +246,6 @@ def _run_fints_session(
             end_date = date.today()
             print(f"[API-MODE] Fetching transactions from {start_date} to {end_date}...")
             print("[API-MODE] (This may require TAN - check Telegram)")
-            adapter.output(f"Fetching transactions from {start_date} to {end_date}...")
 
             try:
                 transactions = fetch_transactions(
@@ -270,15 +259,14 @@ def _run_fints_session(
                 traceback.print_exc()
                 raise
 
+            # Process transactions
+            sent_count = 0
+            skipped_count = 0
+            error_count = 0
+
             if not transactions:
                 print("[API-MODE] No transactions found")
-                adapter.output("No transactions found.")
             else:
-                # Process transactions
-                sent_count = 0
-                skipped_count = 0
-                error_count = 0
-
                 for tx in transactions:
                     tx_data = _extract_transaction_data(tx)
                     if not tx_data:
@@ -312,17 +300,19 @@ def _run_fints_session(
                         error_count += 1
                         adapter.output(f"Failed to post transaction: {result.error_message}")
 
+            if transactions:
                 print(
                     f"[API-MODE] Transactions: {sent_count} sent, "
                     f"{skipped_count} skipped, {error_count} errors"
                 )
-                adapter.output(
-                    f"Transactions: {sent_count} sent, "
-                    f"{skipped_count} skipped, {error_count} errors"
-                )
 
+        # Build consolidated summary message
         print("[API-MODE] Completed successfully!")
-        adapter.output("Update-api mode completed successfully.")
+        summary_parts = ["✓ Sync complete"]
+        if balance_value is not None:
+            summary_parts.append(f"Balance: {balance_value:.2f}€")
+        summary_parts.append(f"Transactions: {sent_count} new, {skipped_count} skipped")
+        adapter.output(" | ".join(summary_parts))
         return 0
 
     except TelegramAdapterTimeoutError:

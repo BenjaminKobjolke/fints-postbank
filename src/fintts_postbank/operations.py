@@ -34,7 +34,7 @@ def fetch_accounts(
     Returns:
         List of SEPA account objects.
     """
-    _output(io, "\nFetching SEPA accounts...")
+    print("Fetching SEPA accounts...")
 
     response = client.get_sepa_accounts()
 
@@ -45,9 +45,9 @@ def fetch_accounts(
 
     accounts: list[Any] = list(response)
 
-    _output(io, f"Found {len(accounts)} account(s)")
+    print(f"Found {len(accounts)} account(s)")
     for acc in accounts:
-        _output(io, f"  - IBAN: {acc.iban}, BIC: {acc.bic}")
+        print(f"  - IBAN: {acc.iban}, BIC: {acc.bic}")
 
     return accounts
 
@@ -71,7 +71,7 @@ def fetch_transactions(
     Returns:
         List of transaction objects.
     """
-    _output(io, f"\nFetching transactions from {start_date} to {end_date}...")
+    print(f"Fetching transactions from {start_date} to {end_date}...")
 
     print("[FINTS] Calling get_transactions...")
     response = client.get_transactions(account, start_date, end_date)
@@ -87,7 +87,7 @@ def fetch_transactions(
     print("[FINTS] Converting response to list...")
     transactions: list[Any] = list(response) if response else []
     print(f"[FINTS] Converted {len(transactions)} transactions")
-    _output(io, f"Found {len(transactions)} transaction(s)")
+    print(f"Found {len(transactions)} transaction(s)")
 
     return transactions
 
@@ -107,7 +107,7 @@ def fetch_balance(
     Returns:
         Balance information.
     """
-    _output(io, "\nFetching account balance...")
+    print("Fetching account balance...")
 
     response = client.get_balance(account)
 
