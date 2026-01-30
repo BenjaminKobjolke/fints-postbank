@@ -313,6 +313,7 @@ def _run_fints_session(
             sent_count = 0
             skipped_count = 0
             error_count = 0
+            new_transactions: list[tuple[date, Decimal, str]] = []
 
             if not transactions:
                 print("[API-MODE] No transactions found")
@@ -346,6 +347,7 @@ def _run_fints_session(
                             skipped_count += 1
                         else:
                             sent_count += 1
+                            new_transactions.append((tx_date, amount, tx_name))
                     else:
                         error_count += 1
                         adapter.output(f"Failed to post transaction: {result.error_message}")
@@ -363,6 +365,13 @@ def _run_fints_session(
             summary_parts.append(f"Balance: {balance_value:.2f}€")
         summary_parts.append(f"Transactions: {sent_count} new, {skipped_count} skipped")
         adapter.output(" | ".join(summary_parts))
+
+        # Show details of new transactions
+        if new_transactions:
+            for tx_date, amount, tx_name in new_transactions:
+                sign = "+" if amount >= 0 else ""
+                adapter.output(f"  {tx_date}: {sign}{amount:.2f}€ - {tx_name}")
+
         return 0
 
     except (TelegramAdapterTimeoutError, XmppAdapterTimeoutError):
