@@ -31,6 +31,7 @@ Both are automatically installed from GitHub via uv.
 
 2. Copy `.env.example` to `.env` and fill in your Postbank credentials:
    ```
+   IBAN=DE30760100850087278859
    FINTS_USERNAME=your_postbank_id
    FINTS_PASSWORD=your_password
    ```
@@ -209,6 +210,15 @@ fintts-postbank/
 
 ## Configuration
 
+### Environment Variables
+
+Required in `.env`:
+- `IBAN` - Your Postbank account IBAN
+- `FINTS_USERNAME` - Your Postbank user ID
+- `FINTS_PASSWORD` - Your Postbank password
+
+### Bank Constants
+
 Bank-specific constants are in `src/fintts_postbank/config/constants.py`:
-- BLZ: 12345
+- BLZ: 36010043
 - HBCI URL: https://hbci.postbank.de/banking/hbci.do

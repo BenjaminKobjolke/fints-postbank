@@ -178,7 +178,8 @@ def find_account_by_iban(accounts: list[Any], iban: str) -> Any | None:
     Returns:
         Matching account or None.
     """
+    normalized_iban = iban.replace(" ", "").upper()
     for acc in accounts:
-        if acc.iban == iban:
+        if acc.iban.replace(" ", "").upper() == normalized_iban:
             return acc
     return None
