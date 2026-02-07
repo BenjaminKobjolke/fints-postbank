@@ -42,6 +42,13 @@ class TransactionDatabase:
                     UNIQUE(fints_username, transaction_date, amount, purpose_hash)
                 )
             """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS last_balance (
+                    fints_username TEXT PRIMARY KEY,
+                    balance_value TEXT NOT NULL,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
             conn.commit()
 
     @staticmethod
@@ -119,6 +126,43 @@ class TransactionDatabase:
                 VALUES (?, ?, ?, ?, ?)
                 """,
                 (fints_username, transaction_date.isoformat(), str(amount), name, purpose_hash),
+            )
+            conn.commit()
+
+    def get_last_balance(self, fints_username: str) -> Decimal | None:
+        """Get the last stored balance for a user.
+
+        Args:
+            fints_username: The FinTS username.
+
+        Returns:
+            The last balance as Decimal, or None if no balance stored.
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute(
+                "SELECT balance_value FROM last_balance WHERE fints_username = ?",
+                (fints_username,),
+            )
+            row = cursor.fetchone()
+            return Decimal(row[0]) if row else None
+
+    def update_last_balance(self, fints_username: str, balance_value: Decimal) -> None:
+        """Update the stored balance for a user.
+
+        Args:
+            fints_username: The FinTS username.
+            balance_value: The new balance value.
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute(
+                """
+                INSERT INTO last_balance (fints_username, balance_value, updated_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(fints_username)
+                DO UPDATE SET balance_value = excluded.balance_value,
+                              updated_at = excluded.updated_at
+                """,
+                (fints_username, str(balance_value)),
             )
             conn.commit()
 

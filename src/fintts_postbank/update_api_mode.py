@@ -243,7 +243,6 @@ def _run_fints_session(
                 raise
             if not accounts:
                 print("[API-MODE] ERROR: No accounts found!")
-                adapter.output("No accounts found!")
                 return 1
 
             # Find the configured account
@@ -252,7 +251,6 @@ def _run_fints_session(
             if not account:
                 print(f"[API-MODE] ERROR: Account with IBAN {IBAN} not found!")
                 print(f"[API-MODE] Available IBANs: {[a.iban for a in accounts]}")
-                adapter.output(f"Account with IBAN {IBAN} not found!")
                 # Use first account as fallback
                 account = accounts[0]
                 print(f"[API-MODE] Using first available account: {account.iban}")
@@ -285,11 +283,9 @@ def _run_fints_session(
                         print("[API-MODE] Balance posted successfully!")
                 else:
                     print(f"[API-MODE] Failed to post balance: {balance_result.error_message}")
-                    adapter.output(f"Failed to post balance: {balance_result.error_message}")
                     return 1
             else:
                 print("[API-MODE] Could not fetch balance")
-                adapter.output("Could not fetch balance.")
 
             # Fetch transactions
             start_date = api_settings.transaction_start_date
@@ -350,7 +346,7 @@ def _run_fints_session(
                             new_transactions.append((tx_date, amount, tx_name))
                     else:
                         error_count += 1
-                        adapter.output(f"Failed to post transaction: {result.error_message}")
+                        print(f"[API-MODE] Failed to post transaction: {result.error_message}")
 
             if transactions:
                 print(
@@ -358,27 +354,48 @@ def _run_fints_session(
                     f"{skipped_count} skipped, {error_count} errors"
                 )
 
+        # Check if balance changed compared to last sync
+        previous_balance = tx_db.get_last_balance(fints_settings.username)
+        balance_changed = balance_value is not None and (
+            previous_balance is None or previous_balance != balance_value
+        )
+
+        # Update stored balance after successful sync
+        if balance_value is not None:
+            tx_db.update_last_balance(fints_settings.username, balance_value)
+
         # Build consolidated summary message
         print("[API-MODE] Completed successfully!")
-        summary_parts = ["✓ Sync complete"]
+        summary_parts = []
         if balance_value is not None:
             summary_parts.append(f"Balance: {balance_value:.2f}€")
-        summary_parts.append(f"Transactions: {sent_count} new, {skipped_count} skipped")
-        adapter.output(" | ".join(summary_parts))
+        summary_parts.append(f"New transactions: {sent_count}")
+        summary_msg = " | ".join(summary_parts)
 
-        # Show details of new transactions
-        if new_transactions:
-            for tx_date, amount, tx_name in new_transactions:
-                sign = "+" if amount >= 0 else ""
-                adapter.output(f"  {tx_date}: {sign}{amount:.2f}€ - {tx_name}")
+        # Only send chat message if balance changed
+        if balance_changed:
+            print(
+                f"[API-MODE] Balance changed ({previous_balance} -> {balance_value}),"
+                " notifying user"
+            )
+            adapter.output(summary_msg)
+
+            # Show details of new transactions
+            if new_transactions:
+                for tx_date, amount, tx_name in new_transactions:
+                    sign = "+" if amount >= 0 else ""
+                    adapter.output(f"  {tx_date}: {sign}{amount:.2f}€ - {tx_name}")
+        else:
+            print(f"[API-MODE] Balance unchanged ({balance_value}), skipping notification")
+            print(f"[API-MODE] {summary_msg}")
 
         return 0
 
     except (TelegramAdapterTimeoutError, XmppAdapterTimeoutError):
-        adapter.output("Session timed out waiting for TAN confirmation.")
+        print("[API-MODE] Session timed out waiting for TAN confirmation.")
         return 1
     except Exception as e:
-        adapter.output(f"Error during FinTS session: {e}")
+        print(f"[API-MODE] Error during FinTS session: {e}")
         return 1
 
 
@@ -416,16 +433,6 @@ def _run_telegram_update_api(
         api_settings.telegram_target_user_id,
         timeout=300,  # 5 minutes for TAN confirmation
     )
-
-    # Send startup notification to target user
-    print(f"Notifying user {api_settings.telegram_target_user_id}...")
-    try:
-        bot.reply_to_user(
-            "FinTS API sync starting. You may receive TAN challenges.",
-            api_settings.telegram_target_user_id,
-        )
-    except Exception as e:
-        print(f"Warning: Could not send startup notification: {e}")
 
     # Set up message handler for receiving TAN responses
     def on_update(update: Any) -> None:
@@ -470,21 +477,7 @@ def _run_telegram_update_api(
         bot.shutdown()
         return 1
 
-    # Send completion message to all allowed users
     result = result_container[0] if result_container else 1
-    if telegram_settings.allowed_user_ids:
-        if result == 0:
-            completion_msg = "FinTS API sync completed successfully."
-        else:
-            completion_msg = "FinTS API sync finished with errors."
-        print(f"Notifying {len(telegram_settings.allowed_user_ids)} user(s) of completion...")
-        for user_id in telegram_settings.allowed_user_ids:
-            try:
-                bot.reply_to_user(completion_msg, user_id)
-                print(f"  - Notified user {user_id}")
-            except Exception as e:
-                print(f"  - Failed to notify user {user_id}: {e}")
-
     bot.shutdown()
     return result
 
@@ -531,16 +524,6 @@ async def _run_xmpp_update_api_async(
         timeout=300,  # 5 minutes for TAN confirmation
     )
 
-    # Send startup notification to target JID
-    print(f"Notifying {target_jid}...")
-    try:
-        await bot.reply_to_user(
-            "FinTS API sync starting. You may receive TAN challenges.",
-            target_jid,
-        )
-    except Exception as e:
-        print(f"Warning: Could not send startup notification: {e}")
-
     # Set up message handler for receiving TAN responses
     async def on_message(sender: str, body: str, msg: Message) -> None:
         """Handle incoming XMPP message."""
@@ -583,21 +566,7 @@ async def _run_xmpp_update_api_async(
         bot.disconnect()
         return 1
 
-    # Send completion message to all allowed JIDs
     result = result_container[0] if result_container else 1
-    if xmpp_settings.allowed_jids:
-        if result == 0:
-            completion_msg = "FinTS API sync completed successfully."
-        else:
-            completion_msg = "FinTS API sync finished with errors."
-        print(f"Notifying {len(xmpp_settings.allowed_jids)} user(s) of completion...")
-        for jid in xmpp_settings.allowed_jids:
-            try:
-                await bot.reply_to_user(completion_msg, jid)
-                print(f"  - Notified {jid}")
-            except Exception as e:
-                print(f"  - Failed to notify {jid}: {e}")
-
     bot.disconnect()
     return result
 
