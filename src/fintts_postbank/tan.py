@@ -11,6 +11,7 @@ from fintts_postbank.config import Settings, get_settings, save_tan_preferences
 from fintts_postbank.ui import get_valid_choice
 
 if TYPE_CHECKING:
+    from fintts_postbank.config import AccountConfig
     from fintts_postbank.io import IOAdapter
 
 
@@ -159,6 +160,7 @@ def interactive_cli_bootstrap(
     client: FinTS3PinTanClient,
     force_tan_selection: bool = False,
     io: IOAdapter | None = None,
+    account: AccountConfig | None = None,
 ) -> None:
     """Bootstrap TAN mechanisms with input validation and preference saving.
 
@@ -169,7 +171,11 @@ def interactive_cli_bootstrap(
         client: The FinTS client to configure.
         force_tan_selection: If True, force manual TAN selection even if saved.
         io: Optional IOAdapter for I/O operations.
+        account: Optional AccountConfig for multi-account support.
     """
+    # Determine env_path for loading/saving settings
+    env_path = account.env_path if account is not None else None
+
     # Fetch TAN mechanisms from bank if not already cached
     if not client.get_tan_mechanisms():
         client.fetch_tan_mechanisms()
@@ -179,7 +185,7 @@ def interactive_cli_bootstrap(
         raise ValueError("No TAN mechanisms available")
 
     # Load saved preferences
-    settings = get_settings()
+    settings = get_settings(env_path)
 
     # Try to use saved preferences (unless forced to re-select)
     if not force_tan_selection:
@@ -200,7 +206,7 @@ def interactive_cli_bootstrap(
         medium_name = _select_tan_medium(client, io)
 
     # Save preferences for next time
-    save_tan_preferences(mech_key, mech_name, medium_name)
+    save_tan_preferences(mech_key, mech_name, medium_name, env_path)
     _output(io, "TAN preferences saved.")
 
 
