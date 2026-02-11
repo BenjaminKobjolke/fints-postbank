@@ -14,11 +14,13 @@ from fintts_postbank.api_client import ForecastApiClient
 from fintts_postbank.client import create_client
 from fintts_postbank.config import (
     IBAN,
+    discover_accounts,
     get_api_settings,
     get_bot_mode,
     get_settings,
     get_telegram_settings,
     get_xmpp_settings,
+    select_account,
 )
 from fintts_postbank.io import (
     IOAdapter,
@@ -41,6 +43,8 @@ if TYPE_CHECKING:
     from slixmpp import Message  # type: ignore[import-untyped]
     from telegram_bot import TelegramBot  # type: ignore[import-untyped]
     from xmpp_bot import XmppBot  # type: ignore[import-untyped]
+
+    from fintts_postbank.config import AccountConfig
 
 
 class UpdateApiTelegramAdapter(TelegramAdapter):
@@ -91,11 +95,15 @@ class UpdateApiXmppAdapter(XmppAdapter):
         self.target_jid = target_jid
 
 
-def _validate_configuration(bot_mode: str) -> tuple[Any, Any, Any, Any]:
+def _validate_configuration(
+    bot_mode: str,
+    account: AccountConfig | None = None,
+) -> tuple[Any, Any, Any, Any]:
     """Validate all required configuration for update-api mode.
 
     Args:
         bot_mode: The messaging backend mode ("telegram" or "xmpp").
+        account: Optional AccountConfig for multi-account support.
 
     Returns:
         Tuple of (fints_settings, bot_settings, api_settings, bot_mode).
@@ -104,11 +112,12 @@ def _validate_configuration(bot_mode: str) -> tuple[Any, Any, Any, Any]:
     Raises:
         SystemExit: If configuration is invalid or missing.
     """
+    env_path = account.env_path if account is not None else None
     errors: list[str] = []
 
     # Check FinTS settings
     try:
-        fints_settings = get_settings()
+        fints_settings = get_settings(env_path)
     except ValueError as e:
         errors.append(f"FinTS settings: {e}")
         fints_settings = None
@@ -124,7 +133,7 @@ def _validate_configuration(bot_mode: str) -> tuple[Any, Any, Any, Any]:
     # Check bot settings based on mode
     bot_settings: Any = None
     if bot_mode == "xmpp":
-        xmpp_settings = get_xmpp_settings()
+        xmpp_settings = get_xmpp_settings(env_path)
         if not xmpp_settings.jid:
             errors.append("XMPP_JID not set in .env")
         if not xmpp_settings.password:
@@ -133,14 +142,14 @@ def _validate_configuration(bot_mode: str) -> tuple[Any, Any, Any, Any]:
             errors.append("XMPP_DEFAULT_RECEIVER not set in .env (required for --update-api)")
         bot_settings = xmpp_settings
     else:
-        telegram_settings = get_telegram_settings()
+        telegram_settings = get_telegram_settings(env_path)
         if not telegram_settings.bot_token:
             errors.append("TELEGRAM_BOT_TOKEN not set in .env")
         bot_settings = telegram_settings
 
     # Check API settings
     try:
-        api_settings = get_api_settings()
+        api_settings = get_api_settings(env_path)
     except ValueError as e:
         errors.append(f"API settings: {e}")
         api_settings = None
@@ -194,6 +203,7 @@ def _run_fints_session(
     adapter: IOAdapter,
     api_settings: Any,
     fints_settings: Any,
+    account: AccountConfig | None = None,
 ) -> int:
     """Run the FinTS session and post data to API.
 
@@ -201,11 +211,15 @@ def _run_fints_session(
         adapter: The Telegram adapter for I/O.
         api_settings: API configuration settings.
         fints_settings: FinTS configuration settings.
+        account: Optional AccountConfig for multi-account support.
 
     Returns:
         Exit code (0 for success, non-zero for failure).
     """
     print("[API-MODE] Starting FinTS session...")
+
+    # Use account-specific IBAN if provided
+    iban = account.iban if account is not None else IBAN
 
     # Create API client and transaction DB
     print(f"[API-MODE] API URL: {api_settings.api_url}")
@@ -214,11 +228,11 @@ def _run_fints_session(
 
     # Create FinTS client
     print("[API-MODE] Creating FinTS client...")
-    client: FinTS3PinTanClient = create_client(adapter)
+    client: FinTS3PinTanClient = create_client(adapter, account=account)
 
     # Bootstrap TAN mechanisms (uses saved preferences)
     print("[API-MODE] Initializing TAN mechanisms...")
-    interactive_cli_bootstrap(client, force_tan_selection=False, io=adapter)
+    interactive_cli_bootstrap(client, force_tan_selection=False, io=adapter, account=account)
 
     try:
         print("[API-MODE] Opening FinTS session...")
@@ -246,20 +260,20 @@ def _run_fints_session(
                 return 1
 
             # Find the configured account
-            print(f"[API-MODE] Looking for IBAN: {IBAN}")
-            account = find_account_by_iban(accounts, IBAN)
-            if not account:
-                print(f"[API-MODE] ERROR: Account with IBAN {IBAN} not found!")
+            print(f"[API-MODE] Looking for IBAN: {iban}")
+            sepa_account = find_account_by_iban(accounts, iban)
+            if not sepa_account:
+                print(f"[API-MODE] ERROR: Account with IBAN {iban} not found!")
                 print(f"[API-MODE] Available IBANs: {[a.iban for a in accounts]}")
                 # Use first account as fallback
-                account = accounts[0]
-                print(f"[API-MODE] Using first available account: {account.iban}")
+                sepa_account = accounts[0]
+                print(f"[API-MODE] Using first available account: {sepa_account.iban}")
 
-            print(f"[API-MODE] Using account: {account.iban}")
+            print(f"[API-MODE] Using account: {sepa_account.iban}")
 
             # Fetch and post balance
             print("[API-MODE] Fetching balance...")
-            balance = fetch_balance(client, account, adapter)
+            balance = fetch_balance(client, sepa_account, adapter)
             balance_value: Decimal | None = None
 
             if balance and hasattr(balance, "amount"):
@@ -295,7 +309,7 @@ def _run_fints_session(
 
             try:
                 transactions = fetch_transactions(
-                    client, account, start_date, end_date, adapter
+                    client, sepa_account, start_date, end_date, adapter
                 )
                 tx_count = len(transactions) if transactions else 0
                 print(f"[API-MODE] Received {tx_count} transactions")
@@ -403,6 +417,7 @@ def _run_telegram_update_api(
     fints_settings: Any,
     telegram_settings: Any,
     api_settings: Any,
+    account: AccountConfig | None = None,
 ) -> int:
     """Run update-api mode using Telegram backend.
 
@@ -410,6 +425,7 @@ def _run_telegram_update_api(
         fints_settings: FinTS configuration.
         telegram_settings: Telegram bot settings.
         api_settings: API configuration.
+        account: Optional AccountConfig for multi-account support.
 
     Returns:
         Exit code (0 for success, non-zero for failure).
@@ -453,7 +469,7 @@ def _run_telegram_update_api(
         """Run the FinTS session."""
         try:
             print("Session thread starting...")
-            result = _run_fints_session(adapter, api_settings, fints_settings)
+            result = _run_fints_session(adapter, api_settings, fints_settings, account)
             print(f"Session completed with result: {result}")
             result_container.append(result)
         except Exception as e:
@@ -486,6 +502,7 @@ async def _run_xmpp_update_api_async(
     fints_settings: Any,
     xmpp_settings: Any,
     api_settings: Any,
+    account: AccountConfig | None = None,
 ) -> int:
     """Run update-api mode using XMPP backend (async).
 
@@ -493,6 +510,7 @@ async def _run_xmpp_update_api_async(
         fints_settings: FinTS configuration.
         xmpp_settings: XMPP bot settings.
         api_settings: API configuration.
+        account: Optional AccountConfig for multi-account support.
 
     Returns:
         Exit code (0 for success, non-zero for failure).
@@ -542,7 +560,7 @@ async def _run_xmpp_update_api_async(
         """Run the FinTS session."""
         try:
             print("Session thread starting...")
-            result = _run_fints_session(adapter, api_settings, fints_settings)
+            result = _run_fints_session(adapter, api_settings, fints_settings, account)
             print(f"Session completed with result: {result}")
             result_container.append(result)
         except Exception as e:
@@ -575,6 +593,7 @@ def _run_xmpp_update_api(
     fints_settings: Any,
     xmpp_settings: Any,
     api_settings: Any,
+    account: AccountConfig | None = None,
 ) -> int:
     """Run update-api mode using XMPP backend.
 
@@ -582,15 +601,21 @@ def _run_xmpp_update_api(
         fints_settings: FinTS configuration.
         xmpp_settings: XMPP bot settings.
         api_settings: API configuration.
+        account: Optional AccountConfig for multi-account support.
 
     Returns:
         Exit code (0 for success, non-zero for failure).
     """
-    return asyncio.run(_run_xmpp_update_api_async(fints_settings, xmpp_settings, api_settings))
+    return asyncio.run(
+        _run_xmpp_update_api_async(fints_settings, xmpp_settings, api_settings, account)
+    )
 
 
-def run_update_api_mode() -> int:
+def run_update_api_mode(account_name: str | None = None) -> int:
     """Run the update-api mode.
+
+    Args:
+        account_name: Optional account name from --account flag.
 
     Returns:
         Exit code (0 for success, non-zero for failure).
@@ -598,14 +623,39 @@ def run_update_api_mode() -> int:
     print("Update API Mode")
     print("=" * 40)
 
+    # Discover and select account
+    account: AccountConfig | None = None
+    accounts = discover_accounts()
+    if accounts:
+        # For multi-account: require --account if multiple exist
+        if len(accounts) > 1 and account_name is None:
+            # Check if they're all non-default
+            non_default = [a for a in accounts if a.name != "default"]
+            if non_default:
+                print("Multiple accounts found. Use --account <name> to specify which one.")
+                print("Available accounts:")
+                for a in accounts:
+                    print(f"  - {a.name}")
+                return 1
+
+        if len(accounts) == 1 and accounts[0].name == "default" and account_name is None:
+            account = None  # Backward compat
+        else:
+            account = select_account(accounts, account_name)
+            print(f"Using account: {account.name}")
+
+    env_path = account.env_path if account is not None else None
+
     # Determine bot mode (defaults to telegram for update-api if not set)
-    bot_mode = get_bot_mode()
+    bot_mode = get_bot_mode(env_path)
     if bot_mode == "console":
         bot_mode = "telegram"  # Default to telegram for update-api mode
     print(f"Using {bot_mode.upper()} for notifications")
 
     # Validate configuration
-    fints_settings, bot_settings, api_settings, bot_mode = _validate_configuration(bot_mode)
+    fints_settings, bot_settings, api_settings, bot_mode = _validate_configuration(
+        bot_mode, account
+    )
 
     # Check API connectivity
     print(f"Checking API connectivity: {api_settings.api_url}")
@@ -620,6 +670,6 @@ def run_update_api_mode() -> int:
 
     # Run with appropriate backend
     if bot_mode == "xmpp":
-        return _run_xmpp_update_api(fints_settings, bot_settings, api_settings)
+        return _run_xmpp_update_api(fints_settings, bot_settings, api_settings, account)
     else:
-        return _run_telegram_update_api(fints_settings, bot_settings, api_settings)
+        return _run_telegram_update_api(fints_settings, bot_settings, api_settings, account)
