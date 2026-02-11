@@ -5,7 +5,17 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
-from dotenv import load_dotenv
+from dotenv import dotenv_values, load_dotenv
+
+# Cache parsed env files to avoid repeated parsing (and repeated warnings)
+_dotenv_cache: dict[Path, dict[str, str | None]] = {}
+
+
+def _cached_dotenv_values(path: Path) -> dict[str, str | None]:
+    """Parse a .env file, caching the result per path."""
+    if path not in _dotenv_cache:
+        _dotenv_cache[path] = dotenv_values(path)
+    return _dotenv_cache[path]
 
 
 @dataclass(frozen=True)
@@ -41,6 +51,14 @@ class XmppSettings:
 
 
 @dataclass(frozen=True)
+class BotUpdateSettings:
+    """Settings for --update-bot mode (bot notification without API)."""
+
+    telegram_target_user_id: int | None = None
+    transaction_days: int = 30
+
+
+@dataclass(frozen=True)
 class ApiSettings:
     """API settings for forecast-php integration."""
 
@@ -51,10 +69,56 @@ class ApiSettings:
     transaction_start_date: date
 
 
-def get_settings() -> Settings:
+def _get_project_root() -> Path:
+    """Get the project root directory."""
+    return Path(__file__).parent.parent.parent.parent
+
+
+def _get_value(
+    key: str,
+    env_values: dict[str, str | None] | None,
+    default: str | None = None,
+) -> str | None:
+    """Get a config value from env_values dict or os.getenv fallback.
+
+    Args:
+        key: Environment variable name.
+        env_values: Pre-loaded env values (from dotenv_values), or None.
+        default: Default value if not found.
+
+    Returns:
+        The value, or default.
+    """
+    if env_values is not None:
+        val = env_values.get(key)
+        if val is not None:
+            return val
+    return os.getenv(key, default)
+
+
+def _load_env(env_path: Path | None = None) -> dict[str, str | None] | None:
+    """Load env values from a specific path, or load default .env.
+
+    Args:
+        env_path: Specific .env file to load. If None, loads default .env.
+
+    Returns:
+        Dict of env values if env_path given, None otherwise (uses os.getenv).
+    """
+    if env_path is not None:
+        return _cached_dotenv_values(env_path)
+
+    # Default: load into os.environ
+    project_root = _get_project_root()
+    load_dotenv(project_root / ".env")
+    return None
+
+
+def get_settings(env_path: Path | None = None) -> Settings:
     """Load settings from environment variables.
 
-    Looks for .env file in project root directory.
+    Args:
+        env_path: Optional specific .env file to load from.
 
     Returns:
         Settings object with username and password.
@@ -62,14 +126,10 @@ def get_settings() -> Settings:
     Raises:
         ValueError: If required environment variables are missing.
     """
-    # Find project root (where .env should be)
-    project_root = Path(__file__).parent.parent.parent.parent
-    env_path = project_root / ".env"
+    env_values = _load_env(env_path)
 
-    load_dotenv(env_path)
-
-    username = os.getenv("FINTS_USERNAME")
-    password = os.getenv("FINTS_PASSWORD")
+    username = _get_value("FINTS_USERNAME", env_values)
+    password = _get_value("FINTS_PASSWORD", env_values)
 
     if not username:
         raise ValueError("FINTS_USERNAME environment variable is required")
@@ -77,9 +137,9 @@ def get_settings() -> Settings:
         raise ValueError("FINTS_PASSWORD environment variable is required")
 
     # Load optional TAN preferences
-    tan_mechanism = os.getenv("FINTS_TAN_MECHANISM")
-    tan_mechanism_name = os.getenv("FINTS_TAN_MECHANISM_NAME")
-    tan_medium = os.getenv("FINTS_TAN_MEDIUM")
+    tan_mechanism = _get_value("FINTS_TAN_MECHANISM", env_values)
+    tan_mechanism_name = _get_value("FINTS_TAN_MECHANISM_NAME", env_values)
+    tan_medium = _get_value("FINTS_TAN_MEDIUM", env_values)
 
     return Settings(
         username=username,
@@ -90,25 +150,24 @@ def get_settings() -> Settings:
     )
 
 
-def get_telegram_settings() -> TelegramSettings:
+def get_telegram_settings(env_path: Path | None = None) -> TelegramSettings:
     """Load Telegram bot settings from environment variables.
+
+    Args:
+        env_path: Optional specific .env file to load from.
 
     Returns:
         TelegramSettings object with bot token and allowed chat IDs.
     """
-    # Find project root (where .env should be)
-    project_root = Path(__file__).parent.parent.parent.parent
-    env_path = project_root / ".env"
+    env_values = _load_env(env_path)
 
-    load_dotenv(env_path)
-
-    bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
+    bot_token = _get_value("TELEGRAM_BOT_TOKEN", env_values)
 
     # Parse allowed chat IDs (comma-separated list)
-    allowed_chat_ids_str = os.getenv("TELEGRAM_ALLOWED_CHAT_IDS", "")
+    allowed_chat_ids_str = _get_value("TELEGRAM_ALLOWED_CHAT_IDS", env_values, "")
     allowed_chat_ids: set[int] | None = None
 
-    if allowed_chat_ids_str.strip():
+    if allowed_chat_ids_str and allowed_chat_ids_str.strip():
         try:
             allowed_chat_ids = {
                 int(chat_id.strip())
@@ -119,10 +178,10 @@ def get_telegram_settings() -> TelegramSettings:
             pass  # Invalid format, treat as no whitelist
 
     # Parse allowed user IDs (comma-separated list)
-    allowed_user_ids_str = os.getenv("TELEGRAM_ALLOWED_USER_IDS", "")
+    allowed_user_ids_str = _get_value("TELEGRAM_ALLOWED_USER_IDS", env_values, "")
     allowed_user_ids: set[int] | None = None
 
-    if allowed_user_ids_str.strip():
+    if allowed_user_ids_str and allowed_user_ids_str.strip():
         try:
             allowed_user_ids = {
                 int(user_id.strip())
@@ -139,43 +198,43 @@ def get_telegram_settings() -> TelegramSettings:
     )
 
 
-def get_bot_mode() -> str:
+def get_bot_mode(env_path: Path | None = None) -> str:
     """Get the bot mode from environment variable.
+
+    Args:
+        env_path: Optional specific .env file to load from.
 
     Returns:
         Bot mode: "console", "telegram", or "xmpp"
     """
-    project_root = Path(__file__).parent.parent.parent.parent
-    env_path = project_root / ".env"
-    load_dotenv(env_path)
+    env_values = _load_env(env_path)
 
-    mode = os.getenv("BOT_MODE", "console").lower().strip()
+    mode = (_get_value("BOT_MODE", env_values, "console") or "console").lower().strip()
     if mode not in ("console", "telegram", "xmpp"):
         return "console"
     return mode
 
 
-def get_xmpp_settings() -> XmppSettings:
+def get_xmpp_settings(env_path: Path | None = None) -> XmppSettings:
     """Load XMPP bot settings from environment variables.
+
+    Args:
+        env_path: Optional specific .env file to load from.
 
     Returns:
         XmppSettings object with XMPP configuration.
     """
-    # Find project root (where .env should be)
-    project_root = Path(__file__).parent.parent.parent.parent
-    env_path = project_root / ".env"
+    env_values = _load_env(env_path)
 
-    load_dotenv(env_path)
-
-    jid = os.getenv("XMPP_JID")
-    password = os.getenv("XMPP_PASSWORD")
-    default_receiver = os.getenv("XMPP_DEFAULT_RECEIVER")
+    jid = _get_value("XMPP_JID", env_values)
+    password = _get_value("XMPP_PASSWORD", env_values)
+    default_receiver = _get_value("XMPP_DEFAULT_RECEIVER", env_values)
 
     # Parse allowed JIDs (comma-separated list)
-    allowed_jids_str = os.getenv("XMPP_ALLOWED_JIDS", "")
+    allowed_jids_str = _get_value("XMPP_ALLOWED_JIDS", env_values, "")
     allowed_jids: frozenset[str] | None = None
 
-    if allowed_jids_str.strip():
+    if allowed_jids_str and allowed_jids_str.strip():
         allowed_jids = frozenset(
             jid_item.strip().lower()
             for jid_item in allowed_jids_str.split(",")
@@ -183,9 +242,9 @@ def get_xmpp_settings() -> XmppSettings:
         )
 
     # Parse optional settings with defaults
-    resource = os.getenv("XMPP_RESOURCE", "fints-bot")
+    resource = _get_value("XMPP_RESOURCE", env_values, "fints-bot") or "fints-bot"
 
-    connect_timeout_str = os.getenv("XMPP_CONNECT_TIMEOUT", "30")
+    connect_timeout_str = _get_value("XMPP_CONNECT_TIMEOUT", env_values, "30") or "30"
     try:
         connect_timeout = int(connect_timeout_str)
     except ValueError:
@@ -201,8 +260,44 @@ def get_xmpp_settings() -> XmppSettings:
     )
 
 
-def get_api_settings() -> ApiSettings:
+def get_bot_update_settings(env_path: Path | None = None) -> BotUpdateSettings:
+    """Load bot-update settings from environment variables.
+
+    Args:
+        env_path: Optional specific .env file to load from.
+
+    Returns:
+        BotUpdateSettings object with bot-update configuration.
+    """
+    env_values = _load_env(env_path)
+
+    telegram_target_user_id: int | None = None
+    target_str = _get_value("TELEGRAM_TARGET_USER_ID", env_values)
+    if target_str:
+        try:
+            telegram_target_user_id = int(target_str)
+        except ValueError:
+            pass
+
+    transaction_days = 30
+    days_str = _get_value("TRANSACTION_DAYS", env_values)
+    if days_str:
+        try:
+            transaction_days = int(days_str)
+        except ValueError:
+            pass
+
+    return BotUpdateSettings(
+        telegram_target_user_id=telegram_target_user_id,
+        transaction_days=transaction_days,
+    )
+
+
+def get_api_settings(env_path: Path | None = None) -> ApiSettings:
     """Load API settings from environment variables.
+
+    Args:
+        env_path: Optional specific .env file to load from.
 
     Returns:
         ApiSettings object with API configuration.
@@ -210,17 +305,13 @@ def get_api_settings() -> ApiSettings:
     Raises:
         ValueError: If required environment variables are missing or invalid.
     """
-    # Find project root (where .env should be)
-    project_root = Path(__file__).parent.parent.parent.parent
-    env_path = project_root / ".env"
+    env_values = _load_env(env_path)
 
-    load_dotenv(env_path)
-
-    api_url = os.getenv("API_URL")
-    api_user = os.getenv("API_USER")
-    api_password = os.getenv("API_PASSWORD")
-    telegram_target_user_id_str = os.getenv("TELEGRAM_TARGET_USER_ID")
-    transaction_start_date_str = os.getenv("TRANSACTION_START_DATE")
+    api_url = _get_value("API_URL", env_values)
+    api_user = _get_value("API_USER", env_values)
+    api_password = _get_value("API_PASSWORD", env_values)
+    telegram_target_user_id_str = _get_value("TELEGRAM_TARGET_USER_ID", env_values)
+    transaction_start_date_str = _get_value("TRANSACTION_START_DATE", env_values)
 
     # Validate required fields
     missing = []
@@ -264,9 +355,15 @@ def get_api_settings() -> ApiSettings:
     )
 
 
-def _get_env_path() -> Path:
-    """Get the path to the .env file."""
-    project_root = Path(__file__).parent.parent.parent.parent
+def _get_env_path(env_path: Path | None = None) -> Path:
+    """Get the path to the .env file.
+
+    Args:
+        env_path: Optional specific .env file path. If None, uses default .env.
+    """
+    if env_path is not None:
+        return env_path
+    project_root = _get_project_root()
     return project_root / ".env"
 
 
@@ -274,6 +371,7 @@ def save_tan_preferences(
     mechanism: str,
     mechanism_name: str,
     medium: str | None = None,
+    env_path: Path | None = None,
 ) -> None:
     """Save TAN preferences to .env file.
 
@@ -283,12 +381,13 @@ def save_tan_preferences(
         mechanism: TAN mechanism function number (e.g., "920").
         mechanism_name: TAN mechanism name (e.g., "BestSign").
         medium: TAN medium name (e.g., "BennyHauptHandy"), optional.
+        env_path: Optional specific .env file to write to.
     """
-    env_path = _get_env_path()
+    target_path = _get_env_path(env_path)
 
     # Read existing content
-    if env_path.exists():
-        content = env_path.read_text(encoding="utf-8")
+    if target_path.exists():
+        content = target_path.read_text(encoding="utf-8")
         lines = content.splitlines()
     else:
         lines = []
@@ -323,39 +422,53 @@ def save_tan_preferences(
             new_lines.append(f"{var_name}={var_value}")
 
     # Write back
-    env_path.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
+    target_path.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
 
 
-def _get_session_path() -> Path:
-    """Get the path to the session file."""
-    project_root = Path(__file__).parent.parent.parent.parent
+def _get_session_path(account_name: str | None = None) -> Path:
+    """Get the path to the session file.
+
+    Args:
+        account_name: Optional account name for per-account session files.
+    """
+    project_root = _get_project_root()
+    if account_name and account_name != "default":
+        return project_root / f".fints_session.{account_name}"
     return project_root / ".fints_session"
 
 
-def save_client_state(data: bytes) -> None:
+def save_client_state(data: bytes, account_name: str | None = None) -> None:
     """Save client state to file for session reuse.
 
     Args:
         data: Serialized client state from client.deconstruct().
+        account_name: Optional account name for per-account session files.
     """
-    session_path = _get_session_path()
+    session_path = _get_session_path(account_name)
     session_path.write_bytes(data)
 
 
-def load_client_state() -> bytes | None:
+def load_client_state(account_name: str | None = None) -> bytes | None:
     """Load saved client state if available.
+
+    Args:
+        account_name: Optional account name for per-account session files.
 
     Returns:
         Serialized client state bytes, or None if not available.
     """
-    session_path = _get_session_path()
+    session_path = _get_session_path(account_name)
     if session_path.exists():
         return session_path.read_bytes()
     return None
 
 
-def clear_client_state() -> None:
-    """Remove saved client state file."""
-    session_path = _get_session_path()
+def clear_client_state(account_name: str | None = None) -> None:
+    """Remove saved client state file.
+
+    Args:
+        account_name: Optional account name for per-account session files.
+    """
+    session_path = _get_session_path(account_name)
     if session_path.exists():
         session_path.unlink()
