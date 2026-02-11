@@ -8,6 +8,7 @@ FinTS client for Postbank banking operations using the python-fints library.
 - Retrieve transactions (last 100 days by default)
 - Get current account balance
 - Support for BestSign (decoupled TAN) authentication
+- Multi-account support via per-account `.env` files
 
 ## Requirements
 
@@ -20,7 +21,7 @@ This project uses:
 - [telegram-bot](https://github.com/BenjaminKobjolke/telegram-bot) for Telegram integration
 - [xmpp-bot](https://github.com/BenjaminKobjolke/xmpp-bot.git) for XMPP integration
 
-Both are automatically installed from GitHub via uv.
+Both are installed as local editable dependencies via uv from sibling directories (`D:\GIT\BenjaminKobjolke\telegram-bot` and `D:\GIT\BenjaminKobjolke\xmpp-bot`).
 
 ## Setup
 
@@ -50,6 +51,44 @@ The client will:
 4. Show recent transactions
 
 When prompted for TAN (BestSign), confirm the transaction in your Postbank app and press Enter.
+
+## Multi-Account Mode
+
+The application supports multiple bank accounts. Each account has its own `.env.<name>` file with independent credentials, IBAN, and settings.
+
+### Setup
+
+Create a `.env.<name>` file for each account:
+
+```
+.env.postbank     # Postbank account
+.env.sparkasse    # Sparkasse account
+```
+
+Each file is a complete standalone config:
+```env
+BLZ=36010043                                      # Optional, defaults to Postbank
+HBCI_URL=https://hbci.postbank.de/banking/hbci.do # Optional, defaults to Postbank
+IBAN=DE30760100850087278859
+FINTS_USERNAME=your_user_id
+FINTS_PASSWORD=your_password
+```
+
+If only the plain `.env` file exists, everything works as before (single-account mode).
+
+### Account Selection
+
+- **Console/bot modes:** If multiple accounts are found, you are prompted to pick one. Use `--account <name>` to skip the prompt.
+- **`--update-api` mode:** `--account <name>` is required when multiple accounts exist.
+
+The `<name>` matches the part after `.env.` in the filename — e.g. `.env.postbank` → `--account postbank`.
+
+```
+fints-postbank --account postbank
+fints-postbank --update-api --account sparkasse
+```
+
+Each account gets its own session file (`.fints_session.<name>`) and TAN preferences are saved back to the respective `.env.<name>` file.
 
 ## Bot Modes
 
@@ -92,6 +131,28 @@ XMPP_CONNECT_TIMEOUT=30                       # Optional, default: 30
 ```
 
 Run: `fints-postbank --xmpp` or just `fints-postbank` with `BOT_MODE=xmpp`
+
+## Bot Update Mode (--update-bot)
+
+Automated mode that fetches bank data and sends a notification via bot (Telegram or XMPP) when the balance changes. Unlike `--update-api`, this mode does not post data to an external API.
+
+### Configuration
+
+Requires in `.env`:
+```env
+BOT_MODE=telegram              # or xmpp - for TAN notifications
+TELEGRAM_TARGET_USER_ID=123456789  # User to receive notifications and TAN prompts
+# TRANSACTION_DAYS=30          # Optional, defaults to 30
+```
+
+Run: `fints-postbank --update-bot` or use `bot-mode.bat`
+
+### What it does
+
+1. Connects to the bank via FinTS
+2. Fetches balance and recent transactions (last N days)
+3. If the balance changed since the last run, sends a summary via bot
+4. If the balance is unchanged, logs silently without notifying
 
 ## API Mode (--update-api)
 
@@ -197,6 +258,7 @@ fintts-postbank/
 │   ├── main.py              # Entry point
 │   └── config/
 │       ├── __init__.py
+│       ├── accounts.py      # Multi-account discovery & selection
 │       ├── settings.py      # Environment config
 │       └── constants.py     # Bank constants
 ├── tests/
@@ -205,6 +267,7 @@ fintts-postbank/
 ├── install.bat
 ├── update.bat
 ├── start.bat
+├── bot-mode.bat
 └── tools/tests.bat
 ```
 
@@ -212,13 +275,18 @@ fintts-postbank/
 
 ### Environment Variables
 
-Required in `.env`:
-- `IBAN` - Your Postbank account IBAN
-- `FINTS_USERNAME` - Your Postbank user ID
-- `FINTS_PASSWORD` - Your Postbank password
+Required in `.env` (or `.env.<name>` for multi-account):
+- `IBAN` - Your account IBAN
+- `FINTS_USERNAME` - Your bank user ID
+- `FINTS_PASSWORD` - Your bank password
+
+Optional (defaults to Postbank if omitted):
+- `BLZ` - Bank code (Bankleitzahl)
+- `HBCI_URL` - Bank FinTS/HBCI endpoint URL
+- `PRODUCT_ID` - FinTS product registration ID
 
 ### Bank Constants
 
-Bank-specific constants are in `src/fintts_postbank/config/constants.py`:
+Default bank constants (used when not set in `.env`) are in `src/fintts_postbank/config/constants.py`:
 - BLZ: 36010043
 - HBCI URL: https://hbci.postbank.de/banking/hbci.do

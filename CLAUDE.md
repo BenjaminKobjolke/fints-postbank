@@ -1,3 +1,20 @@
+# Package Management
+
+This project uses **uv** as its package manager (not pip). Use `uv pip install` for all package operations.
+
+## Bot Library Repos
+
+The bot libraries are local dependencies. If changes need to be made to the bots, edit them directly at:
+
+- **Telegram bot:** `D:\GIT\BenjaminKobjolke\telegram-bot`
+- **XMPP bot:** `D:\GIT\BenjaminKobjolke\xmpp-bot`
+
+After editing, reinstall into the project venv:
+
+```bash
+uv pip install -e "D:\GIT\BenjaminKobjolke\telegram-bot" -e "D:\GIT\BenjaminKobjolke\xmpp-bot"
+```
+
 # Code Analysis Workflow
 
 After implementing new features, run the following code quality checks:
