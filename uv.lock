@@ -241,8 +241,8 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.4.0" },
-    { name = "telegram-bot", git = "https://github.com/BenjaminKobjolke/telegram-bot" },
-    { name = "xmpp-bot", git = "https://github.com/BenjaminKobjolke/xmpp-bot.git" },
+    { name = "telegram-bot", editable = "../telegram-bot" },
+    { name = "xmpp-bot", editable = "../xmpp-bot" },
 ]
 provides-extras = ["dev"]
 
@@ -728,11 +728,22 @@ wheels = [
 [[package]]
 name = "telegram-bot"
 version = "0.1.0"
-source = { git = "https://github.com/BenjaminKobjolke/telegram-bot#574acf651147baa1bb1318b5d491a4192c99a915" }
+source = { editable = "../telegram-bot" }
 dependencies = [
     { name = "python-dotenv" },
     { name = "python-telegram-bot" },
 ]
+
+[package.metadata]
+requires-dist = [
+    { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.10.0" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
+    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23.0" },
+    { name = "python-dotenv", specifier = ">=1.0.0" },
+    { name = "python-telegram-bot", specifier = ">=21.0" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.4.0" },
+]
+provides-extras = ["dev"]
 
 [[package]]
 name = "text-unidecode"
@@ -785,8 +796,19 @@ wheels = [
 [[package]]
 name = "xmpp-bot"
 version = "0.1.0"
-source = { git = "https://github.com/BenjaminKobjolke/xmpp-bot.git#104682555e709baaeb9e39068783a18772951c66" }
+source = { editable = "../xmpp-bot" }
 dependencies = [
     { name = "python-dotenv" },
     { name = "slixmpp" },
 ]
+
+[package.metadata]
+requires-dist = [
+    { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.10.0" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
+    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23.0" },
+    { name = "python-dotenv", specifier = ">=1.0.0" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.4.0" },
+    { name = "slixmpp", specifier = ">=1.8.0" },
+]
+provides-extras = ["dev"]
