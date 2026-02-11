@@ -10,32 +10,40 @@ from telegram_bot import TelegramBot  # type: ignore[import-untyped]
 from telegram_bot.config import Settings as TelegramBotSettings  # type: ignore[import-untyped]
 
 from fintts_postbank.client import create_client, run_session
-from fintts_postbank.config import get_telegram_settings
+from fintts_postbank.config import discover_accounts, get_telegram_settings, select_account
 from fintts_postbank.io import TelegramAdapter, TelegramAdapterTimeoutError
 from fintts_postbank.tan import interactive_cli_bootstrap
 
 if TYPE_CHECKING:
-    pass
+    from fintts_postbank.config import AccountConfig
 
 
 class TelegramSessionManager:
     """Manages Telegram chat sessions for FinTS operations."""
 
-    def __init__(self, bot: TelegramBot, force_tan_selection: bool = False) -> None:
+    def __init__(
+        self,
+        bot: TelegramBot,
+        force_tan_selection: bool = False,
+        account: AccountConfig | None = None,
+    ) -> None:
         """Initialize the session manager.
 
         Args:
             bot: The TelegramBot instance
             force_tan_selection: Whether to force TAN mechanism selection
+            account: Optional AccountConfig for multi-account support
         """
         self.bot = bot
         self.force_tan_selection = force_tan_selection
+        self.account = account
         self._sessions: dict[int, TelegramAdapter] = {}
         self._session_threads: dict[int, threading.Thread] = {}
         self._lock = threading.Lock()
 
         # Get allowed chat IDs from settings
-        settings = get_telegram_settings()
+        env_path = account.env_path if account is not None else None
+        settings = get_telegram_settings(env_path)
         self.allowed_chat_ids = settings.allowed_chat_ids
 
     def is_authorized(self, chat_id: int) -> bool:
@@ -134,15 +142,18 @@ class TelegramSessionManager:
         needs_reconnect = True
         while needs_reconnect:
             # Create client
-            client = create_client(adapter)
+            client = create_client(adapter, account=self.account)
 
             # Bootstrap TAN mechanisms
             interactive_cli_bootstrap(
-                client, force_tan_selection=self.force_tan_selection, io=adapter
+                client,
+                force_tan_selection=self.force_tan_selection,
+                io=adapter,
+                account=self.account,
             )
 
             # Run session
-            needs_reconnect = run_session(client, adapter)
+            needs_reconnect = run_session(client, adapter, account=self.account)
 
             if needs_reconnect:
                 adapter.output("\nReconnecting...")
@@ -186,14 +197,30 @@ class TelegramSessionManager:
         )
 
 
-def run_telegram_mode(force_tan_selection: bool = False) -> None:
+def run_telegram_mode(
+    force_tan_selection: bool = False,
+    account_name: str | None = None,
+) -> None:
     """Run the FinTS client in Telegram bot mode.
 
     Args:
         force_tan_selection: Whether to force TAN mechanism selection
+        account_name: Optional account name from --account flag
     """
+    # Discover and select account
+    account: AccountConfig | None = None
+    accounts = discover_accounts()
+    if accounts:
+        if len(accounts) == 1 and accounts[0].name == "default" and account_name is None:
+            account = None  # Backward compat
+        else:
+            account = select_account(accounts, account_name)
+            print(f"Using account: {account.name}")
+
+    env_path = account.env_path if account is not None else None
+
     # Get bot token from our settings
-    our_settings = get_telegram_settings()
+    our_settings = get_telegram_settings(env_path)
     if not our_settings.bot_token:
         raise ValueError(
             "TELEGRAM_BOT_TOKEN not set. "
@@ -212,7 +239,7 @@ def run_telegram_mode(force_tan_selection: bool = False) -> None:
     bot.initialize(settings=bot_settings)
 
     # Create session manager
-    manager = TelegramSessionManager(bot, force_tan_selection)
+    manager = TelegramSessionManager(bot, force_tan_selection, account=account)
 
     # Set up message handler
     def on_update(update: Any) -> None:
