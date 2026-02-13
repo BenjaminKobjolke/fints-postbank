@@ -65,8 +65,8 @@ class ApiSettings:
     api_url: str
     api_user: str
     api_password: str
-    telegram_target_user_id: int
     transaction_start_date: date
+    telegram_target_user_id: int | None = None
 
 
 def _get_project_root() -> Path:
@@ -321,21 +321,21 @@ def get_api_settings(env_path: Path | None = None) -> ApiSettings:
         missing.append("API_USER")
     if not api_password:
         missing.append("API_PASSWORD")
-    if not telegram_target_user_id_str:
-        missing.append("TELEGRAM_TARGET_USER_ID")
     if not transaction_start_date_str:
         missing.append("TRANSACTION_START_DATE")
 
     if missing:
         raise ValueError(f"Missing required environment variables: {', '.join(missing)}")
 
-    # Parse telegram target user ID
-    try:
-        telegram_target_user_id = int(telegram_target_user_id_str)  # type: ignore[arg-type]
-    except ValueError as err:
-        raise ValueError(
-            f"TELEGRAM_TARGET_USER_ID must be an integer, got: {telegram_target_user_id_str}"
-        ) from err
+    # Parse telegram target user ID (optional — only needed in telegram bot mode)
+    telegram_target_user_id: int | None = None
+    if telegram_target_user_id_str:
+        try:
+            telegram_target_user_id = int(telegram_target_user_id_str)
+        except ValueError as err:
+            raise ValueError(
+                f"TELEGRAM_TARGET_USER_ID must be an integer, got: {telegram_target_user_id_str}"
+            ) from err
 
     # Parse transaction start date (YYYY-MM-DD format)
     try:
@@ -350,8 +350,8 @@ def get_api_settings(env_path: Path | None = None) -> ApiSettings:
         api_url=api_url,  # type: ignore[arg-type]
         api_user=api_user,  # type: ignore[arg-type]
         api_password=api_password,  # type: ignore[arg-type]
-        telegram_target_user_id=telegram_target_user_id,
         transaction_start_date=transaction_start_date,
+        telegram_target_user_id=telegram_target_user_id,
     )
 
 

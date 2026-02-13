@@ -154,6 +154,14 @@ def _validate_configuration(
         errors.append(f"API settings: {e}")
         api_settings = None
 
+    # Telegram mode requires TELEGRAM_TARGET_USER_ID
+    if (
+        api_settings is not None
+        and bot_mode == "telegram"
+        and api_settings.telegram_target_user_id is None
+    ):
+        errors.append("TELEGRAM_TARGET_USER_ID not set in .env (required for telegram mode)")
+
     if errors:
         print("Configuration errors:")
         for error in errors:
