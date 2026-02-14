@@ -9,6 +9,9 @@ FinTS client for Postbank banking operations using the python-fints library.
 - Get current account balance
 - Support for BestSign (decoupled TAN) authentication
 - Multi-account support via per-account `.env` files
+- Telegram and XMPP bot notifications for balance changes
+- Automated update modes (`--update-bot`, `--update-api`)
+- Bot connection test mode (`--test-bot`)
 
 ## Requirements
 
@@ -153,6 +156,14 @@ Run: `fints-postbank --update-bot` or use `bot-mode.bat`
 2. Fetches balance and recent transactions (last N days)
 3. If the balance changed since the last run, sends a summary via bot
 4. If the balance is unchanged, logs silently without notifying
+
+## Test Bot Mode (--test-bot)
+
+Sends a test message via the configured bot (Telegram or XMPP) to verify your setup is working correctly. No bank connection is made.
+
+Run: `fints-postbank --test-bot` or with a specific account: `fints-postbank --test-bot --account postbank`
+
+Uses the same `BOT_MODE`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_TARGET_USER_ID` (or XMPP equivalents) from your `.env` file.
 
 ## API Mode (--update-api)
 
