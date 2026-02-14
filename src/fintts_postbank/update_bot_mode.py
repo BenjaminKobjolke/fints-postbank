@@ -437,10 +437,12 @@ def _run_telegram_update_bot(
             time.sleep(0.5)
     except KeyboardInterrupt:
         print("\nInterrupted by user.")
+        bot.flush()
         bot.shutdown()
         return 1
 
     result = result_container[0] if result_container else 1
+    bot.flush()
     bot.shutdown()
     return result
 
