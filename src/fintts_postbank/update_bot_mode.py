@@ -196,6 +196,7 @@ def _run_fints_session(
     bot_update_settings: BotUpdateSettings,
     fints_settings: Any,
     account: AccountConfig | None = None,
+    send_all: bool = False,
 ) -> int:
     """Run the FinTS session and notify via bot.
 
@@ -204,6 +205,7 @@ def _run_fints_session(
         bot_update_settings: Bot-update configuration settings.
         fints_settings: FinTS configuration settings.
         account: Optional AccountConfig for multi-account support.
+        send_all: If True, send all transactions (original behavior).
 
     Returns:
         Exit code (0 for success, non-zero for failure).
@@ -299,16 +301,45 @@ def _run_fints_session(
                 traceback.print_exc()
                 raise
 
-            # Collect transaction details
-            all_transactions: list[tuple[date, Decimal, str]] = []
-            if transactions:
-                for tx in transactions:
-                    tx_data = _extract_transaction_data(tx)
-                    if not tx_data:
-                        continue
-                    tx_date, amount, name, _purpose = tx_data
-                    tx_name = name if name else _purpose[:50] if _purpose else "Unknown"
-                    all_transactions.append((tx_date, amount, tx_name))
+            # Collect transaction details (with dedup unless --all)
+            if send_all:
+                # --all mode: collect all transactions (original behavior)
+                all_transactions: list[tuple[date, Decimal, str]] = []
+                if transactions:
+                    for tx in transactions:
+                        tx_data = _extract_transaction_data(tx)
+                        if not tx_data:
+                            continue
+                        tx_date, amount, name, _purpose = tx_data
+                        tx_name = name if name else _purpose[:50] if _purpose else "Unknown"
+                        all_transactions.append((tx_date, amount, tx_name))
+            else:
+                # Default dedup mode: only collect new/unseen transactions
+                all_transactions = []
+                if transactions:
+                    for tx in transactions:
+                        tx_data = _extract_transaction_data(tx)
+                        if not tx_data:
+                            continue
+                        tx_date, amount, name, purpose = tx_data
+                        tx_name = name if name else purpose[:50] if purpose else "Unknown"
+
+                        if tx_db.is_transaction_sent(
+                            fints_settings.username, tx_date, amount, name, purpose
+                        ):
+                            continue
+
+                        tx_db.mark_transaction_sent(
+                            fints_settings.username, tx_date, amount, name, purpose
+                        )
+                        all_transactions.append((tx_date, amount, tx_name))
+
+                if all_transactions:
+                    print(
+                        f"[BOT-MODE] Found {len(all_transactions)} new transaction(s)"
+                    )
+                else:
+                    print("[BOT-MODE] No new transactions")
 
         # Check if balance changed compared to last sync
         previous_balance = tx_db.get_last_balance(fints_settings.username)
@@ -328,21 +359,34 @@ def _run_fints_session(
         summary_parts.append(f"Transactions ({transaction_days}d): {len(all_transactions)}")
         summary_msg = " | ".join(summary_parts)
 
-        # Only send chat message if balance changed
-        if balance_changed:
-            print(
-                f"[BOT-MODE] Balance changed ({previous_balance} -> {balance_value}),"
-                " notifying user"
-            )
+        # Determine whether to notify
+        if send_all:
+            # --all mode: notify only on balance change (original behavior)
+            should_notify = balance_changed
+        else:
+            # Dedup mode: notify if new transactions exist OR balance changed
+            should_notify = bool(all_transactions) or balance_changed
+
+        if should_notify:
+            if balance_changed:
+                print(
+                    f"[BOT-MODE] Balance changed ({previous_balance} -> {balance_value}),"
+                    " notifying user"
+                )
+            if all_transactions and not send_all:
+                print(
+                    f"[BOT-MODE] {len(all_transactions)} new transaction(s),"
+                    " notifying user"
+                )
             adapter.output(summary_msg)
 
-            # Show details of recent transactions
+            # Show details of transactions
             if all_transactions:
                 for tx_date, amount, tx_name in all_transactions:
                     sign = "+" if amount >= 0 else ""
                     adapter.output(f"  {tx_date}: {sign}{amount:.2f}€ - {tx_name}")
         else:
-            print(f"[BOT-MODE] Balance unchanged ({balance_value}), skipping notification")
+            print("[BOT-MODE] No changes to report, skipping notification")
             print(f"[BOT-MODE] {summary_msg}")
 
         return 0
@@ -360,6 +404,7 @@ def _run_telegram_update_bot(
     telegram_settings: Any,
     bot_update_settings: BotUpdateSettings,
     account: AccountConfig | None = None,
+    send_all: bool = False,
 ) -> int:
     """Run update-bot mode using Telegram backend.
 
@@ -368,6 +413,7 @@ def _run_telegram_update_bot(
         telegram_settings: Telegram bot settings.
         bot_update_settings: Bot-update configuration.
         account: Optional AccountConfig for multi-account support.
+        send_all: If True, send all transactions (original behavior).
 
     Returns:
         Exit code (0 for success, non-zero for failure).
@@ -415,7 +461,7 @@ def _run_telegram_update_bot(
         try:
             print("Session thread starting...")
             result = _run_fints_session(
-                adapter, bot_update_settings, fints_settings, account
+                adapter, bot_update_settings, fints_settings, account, send_all
             )
             print(f"Session completed with result: {result}")
             result_container.append(result)
@@ -452,6 +498,7 @@ async def _run_xmpp_update_bot_async(
     xmpp_settings: Any,
     bot_update_settings: BotUpdateSettings,
     account: AccountConfig | None = None,
+    send_all: bool = False,
 ) -> int:
     """Run update-bot mode using XMPP backend (async).
 
@@ -460,6 +507,7 @@ async def _run_xmpp_update_bot_async(
         xmpp_settings: XMPP bot settings.
         bot_update_settings: Bot-update configuration.
         account: Optional AccountConfig for multi-account support.
+        send_all: If True, send all transactions (original behavior).
 
     Returns:
         Exit code (0 for success, non-zero for failure).
@@ -510,7 +558,7 @@ async def _run_xmpp_update_bot_async(
         try:
             print("Session thread starting...")
             result = _run_fints_session(
-                adapter, bot_update_settings, fints_settings, account
+                adapter, bot_update_settings, fints_settings, account, send_all
             )
             print(f"Session completed with result: {result}")
             result_container.append(result)
@@ -545,6 +593,7 @@ def _run_xmpp_update_bot(
     xmpp_settings: Any,
     bot_update_settings: BotUpdateSettings,
     account: AccountConfig | None = None,
+    send_all: bool = False,
 ) -> int:
     """Run update-bot mode using XMPP backend.
 
@@ -553,24 +602,35 @@ def _run_xmpp_update_bot(
         xmpp_settings: XMPP bot settings.
         bot_update_settings: Bot-update configuration.
         account: Optional AccountConfig for multi-account support.
+        send_all: If True, send all transactions (original behavior).
 
     Returns:
         Exit code (0 for success, non-zero for failure).
     """
     return asyncio.run(
-        _run_xmpp_update_bot_async(fints_settings, xmpp_settings, bot_update_settings, account)
+        _run_xmpp_update_bot_async(
+            fints_settings, xmpp_settings, bot_update_settings, account, send_all
+        )
     )
 
 
-def run_update_bot_mode(account_name: str | None = None) -> int:
+def run_update_bot_mode(
+    account_name: str | None = None,
+    send_all: bool = False,
+    days_override: int | None = None,
+) -> int:
     """Run the update-bot mode.
 
     Args:
         account_name: Optional account name from --account flag.
+        send_all: If True, send all transactions (original behavior).
+        days_override: Override TRANSACTION_DAYS setting.
 
     Returns:
         Exit code (0 for success, non-zero for failure).
     """
+    import dataclasses
+
     print("Update Bot Mode")
     print("=" * 40)
 
@@ -606,6 +666,12 @@ def run_update_bot_mode(account_name: str | None = None) -> int:
     # Load bot-update settings
     bot_update_settings = get_bot_update_settings(env_path)
 
+    # Apply --days override
+    if days_override is not None:
+        bot_update_settings = dataclasses.replace(
+            bot_update_settings, transaction_days=days_override
+        )
+
     # Validate configuration (FinTS + bot only, no API)
     fints_settings, bot_settings, bot_mode = _validate_configuration(bot_mode, account)
 
@@ -618,9 +684,9 @@ def run_update_bot_mode(account_name: str | None = None) -> int:
     # Run with appropriate backend
     if bot_mode == "xmpp":
         return _run_xmpp_update_bot(
-            fints_settings, bot_settings, bot_update_settings, account
+            fints_settings, bot_settings, bot_update_settings, account, send_all
         )
     else:
         return _run_telegram_update_bot(
-            fints_settings, bot_settings, bot_update_settings, account
+            fints_settings, bot_settings, bot_update_settings, account, send_all
         )

@@ -19,6 +19,22 @@ def _parse_account_arg() -> str | None:
     return None
 
 
+def _parse_days_arg() -> int | None:
+    """Parse --days <N> from sys.argv.
+
+    Returns:
+        Number of days if specified, None otherwise.
+    """
+    for i, arg in enumerate(sys.argv):
+        if arg == "--days" and i + 1 < len(sys.argv):
+            try:
+                return int(sys.argv[i + 1])
+            except ValueError:
+                print(f"Error: --days requires an integer, got '{sys.argv[i + 1]}'")
+                sys.exit(1)
+    return None
+
+
 def _discover_and_select_account(
     account_name: str | None = None,
 ) -> AccountConfig | None:
@@ -105,7 +121,14 @@ def main() -> None:
     update_api_mode = "--update-api" in sys.argv
     update_bot_mode = "--update-bot" in sys.argv
     test_bot_mode = "--test-bot" in sys.argv
+    send_all = "--all" in sys.argv
+    days_override = _parse_days_arg()
     account_name = _parse_account_arg()
+
+    # Validate --all and --days are only used with --update-bot
+    if (send_all or days_override is not None) and not update_bot_mode:
+        print("Error: --all and --days can only be used with --update-bot")
+        sys.exit(1)
 
     # Validate mutually exclusive mode flags
     mode_flags = [update_api_mode, update_bot_mode, test_bot_mode]
@@ -139,7 +162,13 @@ def main() -> None:
         # Import here to avoid loading dependencies in other modes
         from fintts_postbank.update_bot_mode import run_update_bot_mode
 
-        sys.exit(run_update_bot_mode(account_name=account_name))
+        sys.exit(
+            run_update_bot_mode(
+                account_name=account_name,
+                send_all=send_all,
+                days_override=days_override,
+            )
+        )
     elif test_bot_mode:
         # Import here to avoid loading dependencies in other modes
         from fintts_postbank.test_bot_mode import run_test_bot_mode

@@ -137,7 +137,7 @@ Run: `fints-postbank --xmpp` or just `fints-postbank` with `BOT_MODE=xmpp`
 
 ## Bot Update Mode (--update-bot)
 
-Automated mode that fetches bank data and sends a notification via bot (Telegram or XMPP) when the balance changes. Unlike `--update-api`, this mode does not post data to an external API.
+Automated mode that fetches bank data and sends a notification via bot (Telegram or XMPP) when new transactions appear or the balance changes. Only new/unseen transactions are reported (tracked in SQLite, shared with `--update-api`). Unlike `--update-api`, this mode does not post data to an external API.
 
 ### Configuration
 
@@ -148,14 +148,27 @@ TELEGRAM_TARGET_USER_ID=123456789  # User to receive notifications and TAN promp
 # TRANSACTION_DAYS=30          # Optional, defaults to 30
 ```
 
-Run: `fints-postbank --update-bot` or use `bot-mode.bat`
+### Usage
+
+```
+fints-postbank --update-bot                # Only new transactions (default)
+fints-postbank --update-bot --all          # All transactions (original behavior)
+fints-postbank --update-bot --days 7       # Only new transactions, last 7 days
+fints-postbank --update-bot --days 7 --all # All transactions, last 7 days
+```
+
+### Flags
+
+- `--all` — Send all transactions from the time window instead of only new/unseen ones. Notifications are sent only when the balance changes (original behavior).
+- `--days N` — Override `TRANSACTION_DAYS` for this run (default: 30).
 
 ### What it does
 
 1. Connects to the bank via FinTS
 2. Fetches balance and recent transactions (last N days)
-3. If the balance changed since the last run, sends a summary via bot
-4. If the balance is unchanged, logs silently without notifying
+3. Checks each transaction against the SQLite database for duplicates
+4. If new transactions exist or the balance changed, sends a summary via bot
+5. If nothing changed, logs silently without notifying
 
 ## Test Bot Mode (--test-bot)
 
