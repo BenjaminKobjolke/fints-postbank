@@ -44,7 +44,7 @@ Used exclusively in `--update-api` mode to prevent duplicate submissions to the 
 
 **`sent_transactions`** &mdash; records every transaction already forwarded to the API, keyed by `(fints_username, transaction_date, amount, purpose_hash)`.
 
-**`last_balance`** &mdash; stores the most recent account balance per user so the API can be updated with the current balance.
+**`balances`** &mdash; stores the full history of account balance updates per user. The most recent entry is used as the current balance.
 
 ## Resetting Stored Data
 

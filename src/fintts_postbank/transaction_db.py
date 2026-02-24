@@ -43,12 +43,25 @@ class TransactionDatabase:
                 )
             """)
             conn.execute("""
-                CREATE TABLE IF NOT EXISTS last_balance (
-                    fints_username TEXT PRIMARY KEY,
+                CREATE TABLE IF NOT EXISTS balances (
+                    id INTEGER PRIMARY KEY,
+                    fints_username TEXT NOT NULL,
                     balance_value TEXT NOT NULL,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
+
+            # Migrate old last_balance table to new balances table
+            cursor = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='last_balance'"
+            )
+            if cursor.fetchone() is not None:
+                conn.execute("""
+                    INSERT INTO balances (fints_username, balance_value, updated_at)
+                    SELECT fints_username, balance_value, updated_at FROM last_balance
+                """)
+                conn.execute("DROP TABLE last_balance")
+
             conn.commit()
 
     @staticmethod
@@ -140,7 +153,12 @@ class TransactionDatabase:
         """
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.execute(
-                "SELECT balance_value FROM last_balance WHERE fints_username = ?",
+                """
+                SELECT balance_value FROM balances
+                WHERE fints_username = ?
+                ORDER BY updated_at DESC, id DESC
+                LIMIT 1
+                """,
                 (fints_username,),
             )
             row = cursor.fetchone()
@@ -156,11 +174,8 @@ class TransactionDatabase:
         with sqlite3.connect(self.db_path) as conn:
             conn.execute(
                 """
-                INSERT INTO last_balance (fints_username, balance_value, updated_at)
+                INSERT INTO balances (fints_username, balance_value, updated_at)
                 VALUES (?, ?, CURRENT_TIMESTAMP)
-                ON CONFLICT(fints_username)
-                DO UPDATE SET balance_value = excluded.balance_value,
-                              updated_at = excluded.updated_at
                 """,
                 (fints_username, str(balance_value)),
             )
