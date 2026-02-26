@@ -74,7 +74,7 @@ class TransactionDatabase:
         Returns:
             SHA256 hash of the purpose (first 16 chars).
         """
-        return hashlib.sha256(purpose.encode("utf-8")).hexdigest()[:16]
+        return hashlib.sha256((purpose or "").encode("utf-8")).hexdigest()[:16]
 
     def is_transaction_sent(
         self,

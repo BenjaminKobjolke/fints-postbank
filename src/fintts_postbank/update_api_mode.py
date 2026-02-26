@@ -186,8 +186,8 @@ def _extract_transaction_data(tx: Any) -> tuple[date, Decimal, str, str] | None:
     data = tx.data
     tx_date = data.get("date")
     amount = data.get("amount")
-    applicant = data.get("applicant_name", "")
-    purpose = data.get("purpose", "")
+    applicant = data.get("applicant_name") or ""
+    purpose = data.get("purpose") or ""
 
     if not tx_date or amount is None:
         return None
