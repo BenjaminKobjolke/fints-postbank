@@ -10,7 +10,7 @@ from datetime import date
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
-from fintts_postbank.api_client import ForecastApiClient
+from fintts_postbank.api_client import ErpApiClient
 from fintts_postbank.client import create_client
 from fintts_postbank.config import (
     IBAN,
@@ -231,7 +231,7 @@ def _run_fints_session(
 
     # Create API client and transaction DB
     print(f"[API-MODE] API URL: {api_settings.api_url}")
-    api_client = ForecastApiClient(api_settings)
+    api_client = ErpApiClient(api_settings)
     tx_db = TransactionDatabase()
 
     # Create FinTS client
@@ -669,13 +669,13 @@ def run_update_api_mode(account_name: str | None = None) -> int:
 
     # Check API connectivity
     print(f"Checking API connectivity: {api_settings.api_url}")
-    api_client = ForecastApiClient(api_settings)
+    api_client = ErpApiClient(api_settings)
     ping_result = api_client.ping()
     if ping_result.success:
         print("[API-MODE] API connection OK")
     else:
         print(f"[API-MODE] ERROR: {ping_result.error_message}")
-        print("Please check your API_URL, API_USER, and API_PASSWORD settings.")
+        print("Please check your API_URL, API_EMAIL, and API_PASSWORD settings.")
         return 1
 
     # Run with appropriate backend

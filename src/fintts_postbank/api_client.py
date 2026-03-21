@@ -1,4 +1,4 @@
-"""HTTP client for forecast-php API integration."""
+"""HTTP client for erp-api integration."""
 
 from dataclasses import dataclass
 from datetime import date
@@ -18,10 +18,10 @@ class ApiResponse:
     error_message: str | None = None
 
 
-class ForecastApiClient:
-    """HTTP client for forecast-php API.
+class ErpApiClient:
+    """HTTP client for erp-api.
 
-    Handles balance and transaction posting with HTTP Basic Auth.
+    Handles balance and transaction posting with JWT auth.
     """
 
     def __init__(self, settings: ApiSettings) -> None:
@@ -32,11 +32,97 @@ class ForecastApiClient:
         """
         self.settings = settings
         self.base_url = settings.api_url.rstrip("/")
-        self._auth = httpx.BasicAuth(settings.api_user, settings.api_password)
+        self._token: str | None = None
 
         # Define endpoints in one place
-        self._balance_url = f"{self.base_url}/index.php/records/bankbalance"
-        self._transaction_url = f"{self.base_url}/transaction.php"
+        bank_account_base = (
+            f"{self.base_url}/api/v1/bank-accounts/{settings.api_bank_account_id}"
+        )
+        self._auth_url = f"{self.base_url}/auth/token"
+        self._balance_url = f"{bank_account_base}/balances"
+        self._transaction_url = f"{bank_account_base}/transactions"
+        self._ping_url = f"{self.base_url}/api/v1/bank-accounts"
+
+    def _authenticate(self) -> bool:
+        """Authenticate with the API and cache the JWT token.
+
+        Returns:
+            True if authentication succeeded, False otherwise.
+        """
+        payload = {
+            "email": self.settings.api_email,
+            "password": self.settings.api_password,
+        }
+
+        try:
+            with httpx.Client(timeout=10.0) as client:
+                response = client.post(self._auth_url, json=payload)
+
+                if response.status_code in (200, 201):
+                    data = response.json()
+                    self._token = data.get("access_token")
+                    return self._token is not None
+                return False
+        except httpx.RequestError:
+            return False
+
+    def _get_auth_headers(self) -> dict[str, str]:
+        """Get authorization headers for API requests.
+
+        Returns:
+            Dict with Authorization and X-Company-Id headers.
+        """
+        return {
+            "Authorization": f"Bearer {self._token}",
+            "X-Company-Id": str(self.settings.api_company_id),
+        }
+
+    def _ensure_authenticated(self) -> bool:
+        """Ensure we have a valid token, authenticating if needed.
+
+        Returns:
+            True if we have a valid token, False otherwise.
+        """
+        if self._token is None:
+            return self._authenticate()
+        return True
+
+    def _request_with_retry(
+        self,
+        method: str,
+        url: str,
+        json_payload: dict | None = None,
+        timeout: float = 30.0,
+    ) -> httpx.Response | None:
+        """Make an authenticated request with one retry on 401.
+
+        Args:
+            method: HTTP method ("GET" or "POST").
+            url: The request URL.
+            json_payload: Optional JSON payload for POST requests.
+            timeout: Request timeout in seconds.
+
+        Returns:
+            The httpx.Response, or None if authentication failed.
+        """
+        if not self._ensure_authenticated():
+            return None
+
+        with httpx.Client(timeout=timeout) as client:
+            kwargs: dict = {"headers": self._get_auth_headers()}
+            if json_payload is not None:
+                kwargs["json"] = json_payload
+
+            response = client.request(method, url, **kwargs)
+
+            # On 401, re-authenticate once and retry
+            if response.status_code == 401:
+                if not self._authenticate():
+                    return response  # Return the 401 response
+                kwargs["headers"] = self._get_auth_headers()
+                response = client.request(method, url, **kwargs)
+
+            return response
 
     def ping(self) -> ApiResponse:
         """Check if the API is reachable and credentials are valid.
@@ -45,22 +131,26 @@ class ForecastApiClient:
             ApiResponse indicating success or failure.
         """
         try:
-            with httpx.Client(auth=self._auth, timeout=10.0) as client:
-                # Use GET to check if API is reachable (might return 404 or empty, that's ok)
-                response = client.get(self._balance_url)
+            response = self._request_with_retry("GET", self._ping_url, timeout=10.0)
 
-                if response.status_code == 401:
-                    return ApiResponse(
-                        success=False,
-                        error_message="API authentication failed (401 Unauthorized)",
-                    )
-                elif response.status_code == 403:
-                    return ApiResponse(
-                        success=False,
-                        error_message="API access forbidden (403 Forbidden)",
-                    )
-                # Any other response means the API is reachable
-                return ApiResponse(success=True)
+            if response is None:
+                return ApiResponse(
+                    success=False,
+                    error_message="API authentication failed",
+                )
+
+            if response.status_code == 401:
+                return ApiResponse(
+                    success=False,
+                    error_message="API authentication failed (401 Unauthorized)",
+                )
+            elif response.status_code == 403:
+                return ApiResponse(
+                    success=False,
+                    error_message="API access forbidden (403 Forbidden)",
+                )
+            # Any other response means the API is reachable
+            return ApiResponse(success=True)
         except httpx.ConnectError as e:
             return ApiResponse(
                 success=False,
@@ -85,26 +175,33 @@ class ForecastApiClient:
         }
 
         try:
-            with httpx.Client(auth=self._auth, timeout=30.0) as client:
-                response = client.post(self._balance_url, json=payload)
+            response = self._request_with_retry(
+                "POST", self._balance_url, json_payload=payload
+            )
 
-                if response.status_code in (200, 201):
-                    return ApiResponse(success=True)
-                elif response.status_code == 409:
-                    # Duplicate - treat as success
-                    return ApiResponse(success=True, is_duplicate=True)
-                elif response.status_code == 401:
-                    return ApiResponse(
-                        success=False,
-                        error_message="API authentication failed (401 Unauthorized)",
-                    )
-                else:
-                    return ApiResponse(
-                        success=False,
-                        error_message=(
-                            f"API error {response.status_code}: {response.text[:500]}"
-                        ),
-                    )
+            if response is None:
+                return ApiResponse(
+                    success=False,
+                    error_message="API authentication failed",
+                )
+
+            if response.status_code in (200, 201):
+                return ApiResponse(success=True)
+            elif response.status_code == 409:
+                # Duplicate - treat as success
+                return ApiResponse(success=True, is_duplicate=True)
+            elif response.status_code == 401:
+                return ApiResponse(
+                    success=False,
+                    error_message="API authentication failed (401 Unauthorized)",
+                )
+            else:
+                return ApiResponse(
+                    success=False,
+                    error_message=(
+                        f"API error {response.status_code}: {response.text[:500]}"
+                    ),
+                )
         except httpx.RequestError as e:
             return ApiResponse(success=False, error_message=f"Request error: {e}")
 
@@ -127,30 +224,37 @@ class ForecastApiClient:
         payload = {
             "name": name,
             "value": str(value),
-            "dateactual": date_actual.isoformat(),
+            "date_actual": date_actual.isoformat(),
             "status": "paid",
         }
 
         try:
-            with httpx.Client(auth=self._auth, timeout=30.0) as client:
-                response = client.post(self._transaction_url, json=payload)
+            response = self._request_with_retry(
+                "POST", self._transaction_url, json_payload=payload
+            )
 
-                if response.status_code in (200, 201):
-                    return ApiResponse(success=True)
-                elif response.status_code == 409:
-                    # Duplicate - treat as success
-                    return ApiResponse(success=True, is_duplicate=True)
-                elif response.status_code == 401:
-                    return ApiResponse(
-                        success=False,
-                        error_message="API authentication failed (401 Unauthorized)",
-                    )
-                else:
-                    return ApiResponse(
-                        success=False,
-                        error_message=(
-                            f"API error {response.status_code}: {response.text[:500]}"
-                        ),
-                    )
+            if response is None:
+                return ApiResponse(
+                    success=False,
+                    error_message="API authentication failed",
+                )
+
+            if response.status_code in (200, 201):
+                return ApiResponse(success=True)
+            elif response.status_code == 409:
+                # Duplicate - treat as success
+                return ApiResponse(success=True, is_duplicate=True)
+            elif response.status_code == 401:
+                return ApiResponse(
+                    success=False,
+                    error_message="API authentication failed (401 Unauthorized)",
+                )
+            else:
+                return ApiResponse(
+                    success=False,
+                    error_message=(
+                        f"API error {response.status_code}: {response.text[:500]}"
+                    ),
+                )
         except httpx.RequestError as e:
             return ApiResponse(success=False, error_message=f"Request error: {e}")

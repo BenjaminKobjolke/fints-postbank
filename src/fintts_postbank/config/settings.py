@@ -60,11 +60,13 @@ class BotUpdateSettings:
 
 @dataclass(frozen=True)
 class ApiSettings:
-    """API settings for forecast-php integration."""
+    """API settings for erp-api integration."""
 
     api_url: str
-    api_user: str
+    api_email: str
     api_password: str
+    api_company_id: int
+    api_bank_account_id: int
     transaction_start_date: date
     telegram_target_user_id: int | None = None
 
@@ -308,8 +310,10 @@ def get_api_settings(env_path: Path | None = None) -> ApiSettings:
     env_values = _load_env(env_path)
 
     api_url = _get_value("API_URL", env_values)
-    api_user = _get_value("API_USER", env_values)
+    api_email = _get_value("API_EMAIL", env_values)
     api_password = _get_value("API_PASSWORD", env_values)
+    api_company_id_str = _get_value("API_COMPANY_ID", env_values)
+    api_bank_account_id_str = _get_value("API_BANK_ACCOUNT_ID", env_values)
     telegram_target_user_id_str = _get_value("TELEGRAM_TARGET_USER_ID", env_values)
     transaction_start_date_str = _get_value("TRANSACTION_START_DATE", env_values)
 
@@ -317,15 +321,34 @@ def get_api_settings(env_path: Path | None = None) -> ApiSettings:
     missing = []
     if not api_url:
         missing.append("API_URL")
-    if not api_user:
-        missing.append("API_USER")
+    if not api_email:
+        missing.append("API_EMAIL")
     if not api_password:
         missing.append("API_PASSWORD")
+    if not api_company_id_str:
+        missing.append("API_COMPANY_ID")
+    if not api_bank_account_id_str:
+        missing.append("API_BANK_ACCOUNT_ID")
     if not transaction_start_date_str:
         missing.append("TRANSACTION_START_DATE")
 
     if missing:
         raise ValueError(f"Missing required environment variables: {', '.join(missing)}")
+
+    # Parse integer fields
+    try:
+        api_company_id = int(api_company_id_str)  # type: ignore[arg-type]
+    except ValueError as err:
+        raise ValueError(
+            f"API_COMPANY_ID must be an integer, got: {api_company_id_str}"
+        ) from err
+
+    try:
+        api_bank_account_id = int(api_bank_account_id_str)  # type: ignore[arg-type]
+    except ValueError as err:
+        raise ValueError(
+            f"API_BANK_ACCOUNT_ID must be an integer, got: {api_bank_account_id_str}"
+        ) from err
 
     # Parse telegram target user ID (optional — only needed in telegram bot mode)
     telegram_target_user_id: int | None = None
@@ -348,8 +371,10 @@ def get_api_settings(env_path: Path | None = None) -> ApiSettings:
 
     return ApiSettings(
         api_url=api_url,  # type: ignore[arg-type]
-        api_user=api_user,  # type: ignore[arg-type]
+        api_email=api_email,  # type: ignore[arg-type]
         api_password=api_password,  # type: ignore[arg-type]
+        api_company_id=api_company_id,
+        api_bank_account_id=api_bank_account_id,
         transaction_start_date=transaction_start_date,
         telegram_target_user_id=telegram_target_user_id,
     )
