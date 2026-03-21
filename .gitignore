@@ -47,3 +47,4 @@ htmlcov/
 .claude
 code_analysis_results/
 /nul
+.env.xida_forecast_api
