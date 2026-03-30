@@ -171,14 +171,14 @@ def _validate_configuration(
     return fints_settings, bot_settings, api_settings, bot_mode
 
 
-def _extract_transaction_data(tx: Any) -> tuple[date, Decimal, str, str] | None:
+def _extract_transaction_data(tx: Any) -> dict[str, Any] | None:
     """Extract relevant data from a transaction object.
 
     Args:
         tx: Transaction object from FinTS.
 
     Returns:
-        Tuple of (date, amount, name, purpose) or None if extraction fails.
+        Dict with transaction fields or None if extraction fails.
     """
     if not hasattr(tx, "data"):
         return None
@@ -192,10 +192,13 @@ def _extract_transaction_data(tx: Any) -> tuple[date, Decimal, str, str] | None:
     if not tx_date or amount is None:
         return None
 
-    # Convert amount to Decimal
+    # Convert amount to Decimal and extract currency
+    currency: str | None = None
     if hasattr(amount, "amount"):
         # mt940 Amount object
         amount_decimal = Decimal(str(amount.amount))
+        if hasattr(amount, "currency"):
+            currency = str(amount.currency) or None
     elif isinstance(amount, Decimal):
         amount_decimal = amount
     else:
@@ -204,7 +207,20 @@ def _extract_transaction_data(tx: Any) -> tuple[date, Decimal, str, str] | None:
         except (ValueError, TypeError):
             return None
 
-    return tx_date, amount_decimal, applicant, purpose
+    return {
+        "date": tx_date,
+        "amount": amount_decimal,
+        "name": applicant,
+        "purpose": purpose,
+        "applicant_iban": data.get("applicant_iban") or None,
+        "applicant_bic": data.get("applicant_bin") or None,
+        "posting_text": data.get("posting_text") or None,
+        "end_to_end_reference": data.get("end_to_end_reference") or None,
+        "customer_reference": data.get("customer_reference") or None,
+        "creditor_id": data.get("applicant_creditor_id") or None,
+        "mandate_reference": data.get("additional_position_reference") or None,
+        "currency": currency,
+    }
 
 
 def _run_fints_session(
@@ -341,7 +357,10 @@ def _run_fints_session(
                     if not tx_data:
                         continue
 
-                    tx_date, amount, name, purpose = tx_data
+                    tx_date = tx_data["date"]
+                    amount = tx_data["amount"]
+                    name = tx_data["name"]
+                    purpose = tx_data["purpose"]
 
                     # Check if already sent
                     if tx_db.is_transaction_sent(
@@ -353,8 +372,21 @@ def _run_fints_session(
                     # Build transaction name for API
                     tx_name = name if name else purpose[:50] if purpose else "Unknown"
 
-                    # Post to API
-                    result = api_client.post_transaction(tx_name, amount, tx_date)
+                    # Post to API with additional fields
+                    result = api_client.post_transaction(
+                        tx_name,
+                        amount,
+                        tx_date,
+                        purpose=purpose or None,
+                        applicant_iban=tx_data["applicant_iban"],
+                        applicant_bic=tx_data["applicant_bic"],
+                        posting_text=tx_data["posting_text"],
+                        end_to_end_reference=tx_data["end_to_end_reference"],
+                        customer_reference=tx_data["customer_reference"],
+                        creditor_id=tx_data["creditor_id"],
+                        mandate_reference=tx_data["mandate_reference"],
+                        currency=tx_data["currency"],
+                    )
 
                     if result.success:
                         # Mark as sent in local DB

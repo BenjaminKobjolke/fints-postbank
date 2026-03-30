@@ -210,6 +210,16 @@ class ErpApiClient:
         name: str,
         value: Decimal,
         date_actual: date,
+        *,
+        purpose: str | None = None,
+        applicant_iban: str | None = None,
+        applicant_bic: str | None = None,
+        posting_text: str | None = None,
+        end_to_end_reference: str | None = None,
+        customer_reference: str | None = None,
+        creditor_id: str | None = None,
+        mandate_reference: str | None = None,
+        currency: str | None = None,
     ) -> ApiResponse:
         """Post a transaction to the API.
 
@@ -217,16 +227,41 @@ class ErpApiClient:
             name: Transaction name/description.
             value: Transaction amount (positive or negative).
             date_actual: The actual date of the transaction.
+            purpose: Full transaction purpose text.
+            applicant_iban: IBAN of the sender/receiver.
+            applicant_bic: BIC/SWIFT code of the sender/receiver bank.
+            posting_text: Transaction type label (e.g. "SEPA-Ueberweisung").
+            end_to_end_reference: SEPA end-to-end reference (EREF).
+            customer_reference: Customer reference (KREF).
+            creditor_id: SEPA creditor identifier (CRED).
+            mandate_reference: SEPA mandate reference (MREF).
+            currency: ISO 4217 currency code (e.g. "EUR").
 
         Returns:
             ApiResponse indicating success or failure.
         """
-        payload = {
+        payload: dict[str, str] = {
             "name": name,
             "value": str(value),
             "date_actual": date_actual.isoformat(),
             "status": "paid",
         }
+
+        # Include optional fields only when present
+        optional_fields = {
+            "purpose": purpose,
+            "applicant_iban": applicant_iban,
+            "applicant_bic": applicant_bic,
+            "posting_text": posting_text,
+            "end_to_end_reference": end_to_end_reference,
+            "customer_reference": customer_reference,
+            "creditor_id": creditor_id,
+            "mandate_reference": mandate_reference,
+            "currency": currency,
+        }
+        for key, val in optional_fields.items():
+            if val is not None:
+                payload[key] = val
 
         try:
             response = self._request_with_retry(
