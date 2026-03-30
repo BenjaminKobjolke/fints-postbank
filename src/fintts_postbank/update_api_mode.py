@@ -228,6 +228,8 @@ def _run_fints_session(
     api_settings: Any,
     fints_settings: Any,
     account: AccountConfig | None = None,
+    *,
+    resync: bool = False,
 ) -> int:
     """Run the FinTS session and post data to API.
 
@@ -236,11 +238,14 @@ def _run_fints_session(
         api_settings: API configuration settings.
         fints_settings: FinTS configuration settings.
         account: Optional AccountConfig for multi-account support.
+        resync: If True, skip local dedup and re-send all transactions.
 
     Returns:
         Exit code (0 for success, non-zero for failure).
     """
     print("[API-MODE] Starting FinTS session...")
+    if resync:
+        print("[API-MODE] RESYNC mode - will re-send all transactions")
 
     # Use account-specific IBAN if provided
     iban = account.iban if account is not None else IBAN
@@ -362,8 +367,8 @@ def _run_fints_session(
                     name = tx_data["name"]
                     purpose = tx_data["purpose"]
 
-                    # Check if already sent
-                    if tx_db.is_transaction_sent(
+                    # Check if already sent (skip check in resync mode)
+                    if not resync and tx_db.is_transaction_sent(
                         fints_settings.username, tx_date, amount, name, purpose
                     ):
                         skipped_count += 1
@@ -458,6 +463,8 @@ def _run_telegram_update_api(
     telegram_settings: Any,
     api_settings: Any,
     account: AccountConfig | None = None,
+    *,
+    resync: bool = False,
 ) -> int:
     """Run update-api mode using Telegram backend.
 
@@ -466,6 +473,7 @@ def _run_telegram_update_api(
         telegram_settings: Telegram bot settings.
         api_settings: API configuration.
         account: Optional AccountConfig for multi-account support.
+        resync: If True, skip local dedup and re-send all transactions.
 
     Returns:
         Exit code (0 for success, non-zero for failure).
@@ -509,7 +517,9 @@ def _run_telegram_update_api(
         """Run the FinTS session."""
         try:
             print("Session thread starting...")
-            result = _run_fints_session(adapter, api_settings, fints_settings, account)
+            result = _run_fints_session(
+                adapter, api_settings, fints_settings, account, resync=resync
+            )
             print(f"Session completed with result: {result}")
             result_container.append(result)
         except Exception as e:
@@ -545,6 +555,8 @@ async def _run_xmpp_update_api_async(
     xmpp_settings: Any,
     api_settings: Any,
     account: AccountConfig | None = None,
+    *,
+    resync: bool = False,
 ) -> int:
     """Run update-api mode using XMPP backend (async).
 
@@ -553,6 +565,7 @@ async def _run_xmpp_update_api_async(
         xmpp_settings: XMPP bot settings.
         api_settings: API configuration.
         account: Optional AccountConfig for multi-account support.
+        resync: If True, skip local dedup and re-send all transactions.
 
     Returns:
         Exit code (0 for success, non-zero for failure).
@@ -602,7 +615,9 @@ async def _run_xmpp_update_api_async(
         """Run the FinTS session."""
         try:
             print("Session thread starting...")
-            result = _run_fints_session(adapter, api_settings, fints_settings, account)
+            result = _run_fints_session(
+                adapter, api_settings, fints_settings, account, resync=resync
+            )
             print(f"Session completed with result: {result}")
             result_container.append(result)
         except Exception as e:
@@ -636,6 +651,8 @@ def _run_xmpp_update_api(
     xmpp_settings: Any,
     api_settings: Any,
     account: AccountConfig | None = None,
+    *,
+    resync: bool = False,
 ) -> int:
     """Run update-api mode using XMPP backend.
 
@@ -644,20 +661,28 @@ def _run_xmpp_update_api(
         xmpp_settings: XMPP bot settings.
         api_settings: API configuration.
         account: Optional AccountConfig for multi-account support.
+        resync: If True, skip local dedup and re-send all transactions.
 
     Returns:
         Exit code (0 for success, non-zero for failure).
     """
     return asyncio.run(
-        _run_xmpp_update_api_async(fints_settings, xmpp_settings, api_settings, account)
+        _run_xmpp_update_api_async(
+            fints_settings, xmpp_settings, api_settings, account, resync=resync
+        )
     )
 
 
-def run_update_api_mode(account_name: str | None = None) -> int:
+def run_update_api_mode(
+    account_name: str | None = None,
+    *,
+    resync: bool = False,
+) -> int:
     """Run the update-api mode.
 
     Args:
         account_name: Optional account name from --account flag.
+        resync: If True, skip local dedup and re-send all transactions.
 
     Returns:
         Exit code (0 for success, non-zero for failure).
@@ -712,6 +737,10 @@ def run_update_api_mode(account_name: str | None = None) -> int:
 
     # Run with appropriate backend
     if bot_mode == "xmpp":
-        return _run_xmpp_update_api(fints_settings, bot_settings, api_settings, account)
+        return _run_xmpp_update_api(
+            fints_settings, bot_settings, api_settings, account, resync=resync
+        )
     else:
-        return _run_telegram_update_api(fints_settings, bot_settings, api_settings, account)
+        return _run_telegram_update_api(
+            fints_settings, bot_settings, api_settings, account, resync=resync
+        )

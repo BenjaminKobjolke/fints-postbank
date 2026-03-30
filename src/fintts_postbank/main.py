@@ -122,12 +122,18 @@ def main() -> None:
     update_bot_mode = "--update-bot" in sys.argv
     test_bot_mode = "--test-bot" in sys.argv
     send_all = "--all" in sys.argv
+    resync = "--resync" in sys.argv
     days_override = _parse_days_arg()
     account_name = _parse_account_arg()
 
     # Validate --all and --days are only used with --update-bot
     if (send_all or days_override is not None) and not update_bot_mode:
         print("Error: --all and --days can only be used with --update-bot")
+        sys.exit(1)
+
+    # Validate --resync is only used with --update-api
+    if resync and not update_api_mode:
+        print("Error: --resync can only be used with --update-api")
         sys.exit(1)
 
     # Validate mutually exclusive mode flags
@@ -157,7 +163,7 @@ def main() -> None:
         # Import here to avoid loading dependencies in other modes
         from fintts_postbank.update_api_mode import run_update_api_mode
 
-        sys.exit(run_update_api_mode(account_name=account_name))
+        sys.exit(run_update_api_mode(account_name=account_name, resync=resync))
     elif update_bot_mode:
         # Import here to avoid loading dependencies in other modes
         from fintts_postbank.update_bot_mode import run_update_bot_mode
