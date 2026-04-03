@@ -178,6 +178,14 @@ Run: `fints-postbank --test-bot` or with a specific account: `fints-postbank --t
 
 Uses the same `BOT_MODE`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_TARGET_USER_ID` (or XMPP equivalents) from your `.env` file.
 
+## List Accounts Mode (--list-accounts)
+
+Connects to the bank via FinTS and displays all SEPA accounts available under the connection. Useful for discovering account IBANs when setting up your `.env` configuration or multi-account mode.
+
+Run: `fints-postbank --list-accounts` or with a specific account: `fints-postbank --list-accounts --account postbank`
+
+The currently configured IBAN (from `.env`) is marked with an asterisk (`*`).
+
 ## API Mode (--update-api)
 
 Automated mode that fetches bank data and posts it to an external API. Useful for syncing transactions to your own finance tracking system.

@@ -121,6 +121,7 @@ def main() -> None:
     update_api_mode = "--update-api" in sys.argv
     update_bot_mode = "--update-bot" in sys.argv
     test_bot_mode = "--test-bot" in sys.argv
+    list_accounts_mode = "--list-accounts" in sys.argv
     send_all = "--all" in sys.argv
     resync = "--resync" in sys.argv
     days_override = _parse_days_arg()
@@ -137,9 +138,12 @@ def main() -> None:
         sys.exit(1)
 
     # Validate mutually exclusive mode flags
-    mode_flags = [update_api_mode, update_bot_mode, test_bot_mode]
+    mode_flags = [update_api_mode, update_bot_mode, test_bot_mode, list_accounts_mode]
     if sum(mode_flags) > 1:
-        print("Error: --update-api, --update-bot, and --test-bot are mutually exclusive")
+        print(
+            "Error: --update-api, --update-bot, --test-bot, and --list-accounts"
+            " are mutually exclusive"
+        )
         sys.exit(1)
 
     # Determine bot mode: CLI flags override env var
@@ -180,6 +184,10 @@ def main() -> None:
         from fintts_postbank.test_bot_mode import run_test_bot_mode
 
         sys.exit(run_test_bot_mode(account_name=account_name))
+    elif list_accounts_mode:
+        from fintts_postbank.list_accounts_mode import run_list_accounts_mode
+
+        sys.exit(run_list_accounts_mode(account_name=account_name))
     elif bot_mode == "telegram":
         # Import here to avoid loading telegram dependencies in console mode
         from fintts_postbank.telegram_mode import run_telegram_mode
