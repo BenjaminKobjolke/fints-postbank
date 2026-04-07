@@ -11,16 +11,20 @@ dependencies = [
     "xmpp-bot",
 ]
 
-[tool.uv.sources]
-telegram-bot = { path = "D:\\GIT\\BenjaminKobjolke\\telegram-bot", editable = true }
-xmpp-bot = { path = "D:\\GIT\\BenjaminKobjolke\\xmpp-bot", editable = true }
-
 [project.optional-dependencies]
+api = [
+    "erp-api-client",
+]
 dev = [
     "pytest>=8.0.0",
     "ruff>=0.4.0",
     "mypy>=1.10.0",
 ]
+
+[tool.uv.sources]
+erp-api-client = { git = "https://github.com/BenjaminKobjolke/erp-api-client.git" }
+telegram-bot = { path = "D:\\GIT\\BenjaminKobjolke\\telegram-bot", editable = true }
+xmpp-bot = { path = "D:\\GIT\\BenjaminKobjolke\\xmpp-bot", editable = true }
 
 [project.scripts]
 fints-postbank = "fintts_postbank.main:main"
