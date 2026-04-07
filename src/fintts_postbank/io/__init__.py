@@ -2,6 +2,7 @@
 
 from .base import IOAdapter
 from .console import ConsoleAdapter
+from .helpers import io_input, io_output
 from .telegram import TelegramAdapter, TelegramAdapterTimeoutError
 from .xmpp import XmppAdapter, XmppAdapterTimeoutError
 
@@ -12,4 +13,6 @@ __all__ = [
     "TelegramAdapterTimeoutError",
     "XmppAdapter",
     "XmppAdapterTimeoutError",
+    "io_input",
+    "io_output",
 ]

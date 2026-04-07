@@ -8,26 +8,12 @@ from fints.client import FinTS3PinTanClient, NeedTANResponse  # type: ignore[imp
 from fints.hhd.flicker import terminal_flicker_unix  # type: ignore[import-untyped]
 
 from fintts_postbank.config import Settings, get_settings, save_tan_preferences
+from fintts_postbank.io.helpers import io_input, io_output
 from fintts_postbank.ui import get_valid_choice
 
 if TYPE_CHECKING:
     from fintts_postbank.config import AccountConfig
     from fintts_postbank.io import IOAdapter
-
-
-def _output(io: IOAdapter | None, message: str) -> None:
-    """Output message using IOAdapter or print."""
-    if io is not None:
-        io.output(message)
-    else:
-        print(message)
-
-
-def _input(io: IOAdapter | None, prompt: str) -> str:
-    """Get input using IOAdapter or input()."""
-    if io is not None:
-        return io.input(prompt)
-    return input(prompt)
 
 
 def _try_use_saved_preferences(
@@ -52,7 +38,7 @@ def _try_use_saved_preferences(
 
     # Check if saved mechanism is still available
     if settings.tan_mechanism not in mechanisms:
-        _output(io, f"Saved TAN mechanism {settings.tan_mechanism} no longer available.")
+        io_output(io, f"Saved TAN mechanism {settings.tan_mechanism} no longer available.")
         return False
 
     # Apply saved mechanism (no confirmation needed)
@@ -75,7 +61,7 @@ def _try_use_saved_preferences(
                 return True
 
         # Medium not found, need to re-select
-        _output(io, f"Saved TAN medium '{settings.tan_medium}' no longer available.")
+        io_output(io, f"Saved TAN medium '{settings.tan_medium}' no longer available.")
         return False
 
     # Log what's being used (console only, not Telegram)
@@ -103,14 +89,14 @@ def _select_tan_mechanism(
         mechanism = list(mechanisms.values())[0]
         name = getattr(mechanism, "name", str(mechanism))
         client.set_tan_mechanism(key)
-        _output(io, f"Using TAN mechanism: {name}")
+        io_output(io, f"Using TAN mechanism: {name}")
         return key, name, mechanism
 
-    _output(io, "Multiple TAN mechanisms available. Which one do you prefer?")
+    io_output(io, "Multiple TAN mechanisms available. Which one do you prefer?")
     mech_list = list(mechanisms.items())
     for i, (key, value) in enumerate(mech_list):
         name = getattr(value, "name", str(value))
-        _output(io, f"{i} Function {key}: {name}")
+        io_output(io, f"{i} Function {key}: {name}")
 
     choice = get_valid_choice("Choice: ", len(mech_list) - 1, io=io)
     key, mechanism = mech_list[choice]
@@ -132,7 +118,7 @@ def _select_tan_medium(
     Returns:
         Selected medium name or None if not needed.
     """
-    _output(io, "We need the name of the TAN medium, let's fetch them from the bank")
+    io_output(io, "We need the name of the TAN medium, let's fetch them from the bank")
     media = client.get_tan_media()
 
     if len(media[1]) == 0:
@@ -141,13 +127,13 @@ def _select_tan_medium(
         medium = media[1][0]
         client.set_tan_medium(medium)
         name = getattr(medium, "tan_medium_name", str(medium))
-        _output(io, f"Using TAN medium: {name}")
+        io_output(io, f"Using TAN medium: {name}")
         return name
 
-    _output(io, "Multiple TAN media available. Which one do you prefer?")
+    io_output(io, "Multiple TAN media available. Which one do you prefer?")
     for i, medium in enumerate(media[1]):
         name = getattr(medium, "tan_medium_name", str(medium))
-        _output(io, f"{i} {name}")
+        io_output(io, f"{i} {name}")
 
     choice = get_valid_choice("Choice: ", len(media[1]) - 1, io=io)
     selected = media[1][choice]
@@ -207,7 +193,7 @@ def interactive_cli_bootstrap(
 
     # Save preferences for next time
     save_tan_preferences(mech_key, mech_name, medium_name, env_path)
-    _output(io, "TAN preferences saved.")
+    io_output(io, "TAN preferences saved.")
 
 
 def handle_tan_challenge(
@@ -227,25 +213,25 @@ def handle_tan_challenge(
         The TAN entered by user, or empty string for decoupled confirmation.
     """
     challenge = response.challenge
-    _output(io, "\nTAN Challenge:")
+    io_output(io, "\nTAN Challenge:")
 
     if challenge:
-        _output(io, f"Challenge: {challenge}")
+        io_output(io, f"Challenge: {challenge}")
 
     # Check if this is a decoupled TAN (like BestSign)
     if response.challenge_hhduc:
-        _output(io, "\nPlease confirm this transaction in your BestSign app.")
-        _input(io, "Press Enter after confirming...")
+        io_output(io, "\nPlease confirm this transaction in your BestSign app.")
+        io_input(io, "Press Enter after confirming...")
         return ""
 
     # Check for flicker/photoTAN
     if response.challenge_hhduc:
-        _output(io, "\nFlicker code displayed (if terminal supports it):")
+        io_output(io, "\nFlicker code displayed (if terminal supports it):")
         try:
             terminal_flicker_unix(response.challenge_hhduc)
         except Exception:
-            _output(io, "(Flicker display not available on this terminal)")
+            io_output(io, "(Flicker display not available on this terminal)")
 
     # Manual TAN entry
-    tan = _input(io, "\nEnter TAN: ").strip()
+    tan = io_input(io, "\nEnter TAN: ").strip()
     return tan

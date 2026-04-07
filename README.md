@@ -7,6 +7,7 @@ FinTS client for Postbank banking operations using the python-fints library.
 - Fetch SEPA account information
 - Retrieve transactions (last 100 days by default)
 - Get current account balance
+- [SEPA transfers](docs/SEPA_TRANSFER.md) from the interactive console
 - Support for BestSign (decoupled TAN) authentication
 - Multi-account support via per-account `.env` files
 - Telegram and XMPP bot notifications for balance changes

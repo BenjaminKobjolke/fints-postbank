@@ -3,15 +3,20 @@
 from __future__ import annotations
 
 from datetime import date, timedelta
+from decimal import Decimal, InvalidOperation
 from typing import TYPE_CHECKING, Any
 
 from fints.client import FinTS3PinTanClient  # type: ignore[import-untyped]
+from schwifty import BIC, IBAN  # type: ignore[import-untyped]
 
+from fintts_postbank.io.helpers import io_input, io_output
 from fintts_postbank.operations import (
+    execute_transfer,
     fetch_balance,
     fetch_transactions,
     print_balance,
     print_transactions,
+    print_transfer_result,
 )
 from fintts_postbank.ui import get_valid_choice
 
@@ -25,14 +30,6 @@ PERIOD_LABELS = {
     4: "this year",
     5: "all",
 }
-
-
-def _output(io: IOAdapter | None, message: str) -> None:
-    """Output message using IOAdapter or print."""
-    if io is not None:
-        io.output(message)
-    else:
-        print(message)
 
 
 def get_transaction_date_range(choice: int) -> tuple[date, date]:
@@ -89,13 +86,13 @@ def show_transactions_menu(io: IOAdapter | None = None) -> int:
     Returns:
         User's menu choice (0-5).
     """
-    _output(io, "\nSelect time period:")
-    _output(io, "1. Today")
-    _output(io, "2. This week")
-    _output(io, "3. This month")
-    _output(io, "4. This year")
-    _output(io, "5. All")
-    _output(io, "0. Back")
+    io_output(io, "\nSelect time period:")
+    io_output(io, "1. Today")
+    io_output(io, "2. This week")
+    io_output(io, "3. This month")
+    io_output(io, "4. This year")
+    io_output(io, "5. All")
+    io_output(io, "0. Back")
     return get_valid_choice("\nChoice: ", 5, io=io)
 
 
@@ -112,13 +109,14 @@ def show_menu(
     Returns:
         User's menu choice (0-2), or -1 to repeat last action.
     """
-    _output(io, "\n1. Show balance")
-    _output(io, "2. Show transactions")
-    _output(io, "0. Exit")
+    io_output(io, "\n1. Show balance")
+    io_output(io, "2. Show transactions")
+    io_output(io, "3. Transfer")
+    io_output(io, "0. Exit")
     if last_action_label:
-        _output(io, f"\n[Enter] {last_action_label}")
-        return get_valid_choice("\nChoice: ", 2, default=-1, io=io)
-    return get_valid_choice("\nChoice: ", 2, io=io)
+        io_output(io, f"\n[Enter] {last_action_label}")
+        return get_valid_choice("\nChoice: ", 3, default=-1, io=io)
+    return get_valid_choice("\nChoice: ", 3, io=io)
 
 
 def is_dialog_error(error: Exception) -> bool:
@@ -135,6 +133,113 @@ def is_dialog_error(error: Exception) -> bool:
         indicator in error_str
         for indicator in ["dialog", "geschlossen", "closed", "9999", "session"]
     )
+
+
+def collect_transfer_details(
+    io: IOAdapter | None = None,
+) -> dict[str, Any] | None:
+    """Collect SEPA transfer details from the user.
+
+    Args:
+        io: Optional IOAdapter for I/O operations.
+
+    Returns:
+        Dictionary with transfer details, or None if user cancels.
+    """
+    io_output(io, "\n--- SEPA Transfer ---")
+    io_output(io, "Enter 'cancel' at any prompt to abort.\n")
+
+    # Recipient IBAN
+    while True:
+        iban_input = io_input(io, "Recipient IBAN: ").strip()
+        if iban_input.lower() == "cancel":
+            return None
+        try:
+            recipient_iban = IBAN(iban_input)
+            break
+        except ValueError as e:
+            io_output(io, f"Invalid IBAN: {e}")
+
+    # Recipient BIC (optional)
+    while True:
+        bic_input = io_input(io, "Recipient BIC (press Enter to skip for domestic): ").strip()
+        if bic_input.lower() == "cancel":
+            return None
+        if not bic_input:
+            recipient_bic = None
+            break
+        try:
+            recipient_bic = str(BIC(bic_input))
+            break
+        except ValueError as e:
+            io_output(io, f"Invalid BIC: {e}")
+
+    # Recipient name
+    while True:
+        recipient_name = io_input(io, "Recipient name: ").strip()
+        if recipient_name.lower() == "cancel":
+            return None
+        if recipient_name:
+            break
+        io_output(io, "Recipient name cannot be empty.")
+
+    # Amount
+    while True:
+        amount_input = io_input(io, "Amount (EUR): ").strip()
+        if amount_input.lower() == "cancel":
+            return None
+        try:
+            amount = Decimal(amount_input.replace(",", "."))
+            if amount <= 0:
+                io_output(io, "Amount must be greater than 0.")
+            elif amount != amount.quantize(Decimal("0.01")):
+                io_output(io, "Amount cannot have more than 2 decimal places.")
+            else:
+                break
+        except InvalidOperation:
+            io_output(io, "Invalid amount. Please enter a valid number (e.g., 100.50).")
+
+    # Reason/description
+    reason = io_input(io, "Transfer reason/description: ").strip()
+    if reason.lower() == "cancel":
+        return None
+
+    return {
+        "recipient_iban": str(recipient_iban),
+        "recipient_bic": recipient_bic,
+        "recipient_name": recipient_name,
+        "amount": amount,
+        "reason": reason,
+    }
+
+
+def confirm_transfer(
+    details: dict[str, Any],
+    source_iban: str,
+    io: IOAdapter | None = None,
+) -> bool:
+    """Show transfer summary and ask for confirmation.
+
+    Args:
+        details: Transfer details dictionary.
+        source_iban: Source account IBAN.
+        io: Optional IOAdapter for I/O operations.
+
+    Returns:
+        True if user confirms, False otherwise.
+    """
+    io_output(io, "\n--- Transfer Summary ---")
+    io_output(io, f"From:        {source_iban}")
+    io_output(io, f"To IBAN:     {details['recipient_iban']}")
+    if details["recipient_bic"]:
+        io_output(io, f"To BIC:      {details['recipient_bic']}")
+    io_output(io, f"Recipient:   {details['recipient_name']}")
+    io_output(io, f"Amount:      {details['amount']:.2f} EUR")
+    io_output(io, f"Reason:      {details['reason']}")
+    io_output(io, "------------------------")
+
+    confirmation = io_input(io, "\nConfirm transfer? (yes/no): ").strip().lower()
+    return confirmation in ("yes", "y")
 
 
 def run_menu_loop(
@@ -172,8 +277,8 @@ def run_menu_loop(
                     print_transactions(transactions, io)
                 except Exception as e:
                     if is_dialog_error(e):
-                        _output(io, f"\nSession expired: {e}")
-                        _output(io, "Reconnecting...")
+                        io_output(io, f"\nSession expired: {e}")
+                        io_output(io, "Reconnecting...")
                         return True
                     raise
                 continue
@@ -187,8 +292,8 @@ def run_menu_loop(
                 last_action = (1, None)
             except Exception as e:
                 if is_dialog_error(e):
-                    _output(io, f"\nSession expired: {e}")
-                    _output(io, "Reconnecting...")
+                    io_output(io, f"\nSession expired: {e}")
+                    io_output(io, "Reconnecting...")
                     return True
                 raise
         elif choice == 2:
@@ -204,7 +309,35 @@ def run_menu_loop(
                 last_action = (2, period_choice)
             except Exception as e:
                 if is_dialog_error(e):
-                    _output(io, f"\nSession expired: {e}")
-                    _output(io, "Reconnecting...")
+                    io_output(io, f"\nSession expired: {e}")
+                    io_output(io, "Reconnecting...")
+                    return True
+                raise
+        elif choice == 3:
+            details = collect_transfer_details(io)
+            if details is None:
+                io_output(io, "Transfer cancelled.")
+                continue
+
+            if not confirm_transfer(details, account.iban, io):
+                io_output(io, "Transfer cancelled.")
+                continue
+
+            try:
+                response = execute_transfer(
+                    client,
+                    account,
+                    recipient_iban=details["recipient_iban"],
+                    recipient_bic=details["recipient_bic"],
+                    recipient_name=details["recipient_name"],
+                    amount=details["amount"],
+                    reason=details["reason"],
+                    io=io,
+                )
+                print_transfer_result(response, io)
+            except Exception as e:
+                if is_dialog_error(e):
+                    io_output(io, f"\nSession expired: {e}")
+                    io_output(io, "Reconnecting...")
                     return True
                 raise

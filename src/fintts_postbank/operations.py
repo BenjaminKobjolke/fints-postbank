@@ -3,22 +3,16 @@
 from __future__ import annotations
 
 from datetime import date
+from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
 from fints.client import FinTS3PinTanClient, NeedTANResponse  # type: ignore[import-untyped]
 
+from fintts_postbank.io.helpers import io_output
 from fintts_postbank.tan import handle_tan_challenge
 
 if TYPE_CHECKING:
     from fintts_postbank.io import IOAdapter
-
-
-def _output(io: IOAdapter | None, message: str) -> None:
-    """Output message using IOAdapter or print."""
-    if io is not None:
-        io.output(message)
-    else:
-        print(message)
 
 
 def fetch_accounts(
@@ -129,7 +123,7 @@ def print_transactions(
         transactions: List of transaction objects.
         io: Optional IOAdapter for I/O operations.
     """
-    _output(io, "\nTransactions:")
+    io_output(io, "\nTransactions:")
 
     for tx in transactions:
         if hasattr(tx, "data"):
@@ -138,13 +132,13 @@ def print_transactions(
             amount = data.get("amount", "N/A")
             purpose = data.get("purpose", "")
             applicant = data.get("applicant_name", "")
-            _output(io, f"\n{tx_date} | {amount}")
+            io_output(io, f"\n{tx_date} | {amount}")
             if applicant:
-                _output(io, f"  From/To: {applicant}")
+                io_output(io, f"  From/To: {applicant}")
             if purpose:
-                _output(io, f"  Purpose: {purpose[:60]}...")
+                io_output(io, f"  Purpose: {purpose[:60]}...")
         else:
-            _output(io, f"\n{tx}")
+            io_output(io, f"\n{tx}")
 
 
 def print_balance(
@@ -157,15 +151,15 @@ def print_balance(
         balance: Balance object from FinTS.
         io: Optional IOAdapter for I/O operations.
     """
-    _output(io, "\nBalance:")
+    io_output(io, "\nBalance:")
 
     if balance:
         if hasattr(balance, "amount"):
-            _output(io, f"Current balance: {balance.amount}")
+            io_output(io, f"Current balance: {balance.amount}")
         else:
-            _output(io, f"Balance: {balance}")
+            io_output(io, f"Balance: {balance}")
     else:
-        _output(io, "Balance information not available")
+        io_output(io, "Balance information not available")
 
 
 def find_account_by_iban(accounts: list[Any], iban: str) -> Any | None:
@@ -183,3 +177,77 @@ def find_account_by_iban(accounts: list[Any], iban: str) -> Any | None:
         if acc.iban.replace(" ", "").upper() == normalized_iban:
             return acc
     return None
+
+
+def execute_transfer(
+    client: FinTS3PinTanClient,
+    account: Any,
+    recipient_iban: str,
+    recipient_bic: str | None,
+    recipient_name: str,
+    amount: Decimal,
+    reason: str,
+    io: IOAdapter | None = None,
+) -> Any:
+    """Execute a SEPA transfer.
+
+    Args:
+        client: Configured FinTS client.
+        account: SEPA account object (source account).
+        recipient_iban: Recipient's IBAN.
+        recipient_bic: Recipient's BIC (None for domestic transfers).
+        recipient_name: Recipient's name.
+        amount: Transfer amount as Decimal.
+        reason: Transfer reason/description.
+        io: Optional IOAdapter for I/O operations.
+
+    Returns:
+        TransactionResponse with status and response details.
+    """
+    print(f"Initiating SEPA transfer of {amount} EUR to {recipient_iban}...")
+
+    response = client.simple_sepa_transfer(
+        account=account,
+        iban=recipient_iban,
+        bic=recipient_bic or "",
+        recipient_name=recipient_name,
+        amount=amount,
+        account_name=account.iban,
+        reason=reason,
+    )
+
+    while isinstance(response, NeedTANResponse):
+        tan = handle_tan_challenge(response, io)
+        response = client.send_tan(response, tan)
+
+    return response
+
+
+def print_transfer_result(
+    response: Any,
+    io: IOAdapter | None = None,
+) -> None:
+    """Print transfer result information.
+
+    Args:
+        response: TransactionResponse from the transfer.
+        io: Optional IOAdapter for I/O operations.
+    """
+    from fints.client import ResponseStatus  # type: ignore[import-untyped]
+
+    io_output(io, "\nTransfer Result:")
+
+    if hasattr(response, "status"):
+        if response.status == ResponseStatus.SUCCESS:
+            io_output(io, "Transfer SUCCESSFUL")
+        elif response.status == ResponseStatus.WARNING:
+            io_output(io, "Transfer completed with WARNINGS")
+        elif response.status == ResponseStatus.ERROR:
+            io_output(io, "Transfer FAILED")
+        else:
+            io_output(io, f"Transfer status: {response.status}")
+
+    if hasattr(response, "responses") and response.responses:
+        for resp in response.responses:
+            text = getattr(resp, "text", str(resp))
+            io_output(io, f"  {text}")

@@ -16,6 +16,7 @@ from fintts_postbank.config import (
     load_client_state,
     save_client_state,
 )
+from fintts_postbank.io.helpers import io_output
 from fintts_postbank.menu import run_menu_loop
 from fintts_postbank.operations import fetch_accounts, find_account_by_iban
 from fintts_postbank.tan import handle_tan_challenge
@@ -23,14 +24,6 @@ from fintts_postbank.tan import handle_tan_challenge
 if TYPE_CHECKING:
     from fintts_postbank.config import AccountConfig
     from fintts_postbank.io import IOAdapter
-
-
-def _output(io: IOAdapter | None, message: str) -> None:
-    """Output message using IOAdapter or print."""
-    if io is not None:
-        io.output(message)
-    else:
-        print(message)
 
 
 def create_client(
@@ -113,7 +106,7 @@ def create_and_bootstrap_client(
             raise
 
     # Stale session — clear and retry once with fresh connection
-    _output(io, "Stale session detected, retrying with fresh connection...")
+    io_output(io, "Stale session detected, retrying with fresh connection...")
     clear_client_state(account_name)
     client = create_client(io, account)
     interactive_cli_bootstrap(
@@ -151,17 +144,17 @@ def run_session(
         accounts = fetch_accounts(client, io)
 
         if not accounts:
-            _output(io, "No accounts found!")
+            io_output(io, "No accounts found!")
             return False
 
         # Find the configured account
         sepa_account = find_account_by_iban(accounts, iban)
         if not sepa_account:
-            _output(io, f"Account with IBAN {iban} not found!")
-            _output(io, "Using first available account...")
+            io_output(io, f"Account with IBAN {iban} not found!")
+            io_output(io, "Using first available account...")
             sepa_account = accounts[0]
 
-        _output(io, f"\nUsing account: {sepa_account.iban}")
+        io_output(io, f"\nUsing account: {sepa_account.iban}")
 
         # Run interactive menu loop
         needs_reconnect = run_menu_loop(client, sepa_account, io)
