@@ -10,7 +10,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
-from fintts_postbank.client import create_client
+from fintts_postbank.client import create_and_bootstrap_client
 from fintts_postbank.config import (
     IBAN,
     discover_accounts,
@@ -34,7 +34,7 @@ from fintts_postbank.operations import (
     fetch_transactions,
     find_account_by_iban,
 )
-from fintts_postbank.tan import handle_tan_challenge, interactive_cli_bootstrap
+from fintts_postbank.tan import handle_tan_challenge
 from fintts_postbank.transaction_db import TransactionDatabase
 
 if TYPE_CHECKING:
@@ -218,13 +218,11 @@ def _run_fints_session(
     # Create transaction DB (for balance tracking only)
     tx_db = TransactionDatabase()
 
-    # Create FinTS client
+    # Create FinTS client and bootstrap TAN mechanisms
     print("[BOT-MODE] Creating FinTS client...")
-    client: FinTS3PinTanClient = create_client(adapter, account=account)
-
-    # Bootstrap TAN mechanisms (uses saved preferences)
-    print("[BOT-MODE] Initializing TAN mechanisms...")
-    interactive_cli_bootstrap(client, force_tan_selection=False, io=adapter, account=account)
+    client: FinTS3PinTanClient = create_and_bootstrap_client(
+        io=adapter, account=account
+    )
 
     try:
         print("[BOT-MODE] Opening FinTS session...")

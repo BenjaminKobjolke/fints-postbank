@@ -10,8 +10,13 @@ from datetime import date
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
-from fintts_postbank.api_client import ErpApiClient
-from fintts_postbank.client import create_client
+try:
+    from erp_api_client import ApiSettings as SharedApiSettings
+    from erp_api_client import ErpApiClient
+except ImportError:
+    SharedApiSettings = None  # type: ignore[assignment, misc]
+    ErpApiClient = None  # type: ignore[assignment, misc]
+from fintts_postbank.client import create_and_bootstrap_client
 from fintts_postbank.config import (
     IBAN,
     discover_accounts,
@@ -35,7 +40,7 @@ from fintts_postbank.operations import (
     fetch_transactions,
     find_account_by_iban,
 )
-from fintts_postbank.tan import handle_tan_challenge, interactive_cli_bootstrap
+from fintts_postbank.tan import handle_tan_challenge
 from fintts_postbank.transaction_db import TransactionDatabase
 
 if TYPE_CHECKING:
@@ -252,16 +257,21 @@ def _run_fints_session(
 
     # Create API client and transaction DB
     print(f"[API-MODE] API URL: {api_settings.api_url}")
-    api_client = ErpApiClient(api_settings)
+    shared_settings = SharedApiSettings(
+        api_url=api_settings.api_url,
+        api_email=api_settings.api_email,
+        api_password=api_settings.api_password,
+        api_company_id=api_settings.api_company_id,
+        api_bank_account_id=api_settings.api_bank_account_id,
+    )
+    api_client = ErpApiClient(shared_settings)
     tx_db = TransactionDatabase()
 
-    # Create FinTS client
+    # Create FinTS client and bootstrap TAN mechanisms
     print("[API-MODE] Creating FinTS client...")
-    client: FinTS3PinTanClient = create_client(adapter, account=account)
-
-    # Bootstrap TAN mechanisms (uses saved preferences)
-    print("[API-MODE] Initializing TAN mechanisms...")
-    interactive_cli_bootstrap(client, force_tan_selection=False, io=adapter, account=account)
+    client: FinTS3PinTanClient = create_and_bootstrap_client(
+        io=adapter, account=account
+    )
 
     try:
         print("[API-MODE] Opening FinTS session...")
@@ -687,6 +697,11 @@ def run_update_api_mode(
     Returns:
         Exit code (0 for success, non-zero for failure).
     """
+    if ErpApiClient is None:
+        print("Error: erp-api-client is not installed.")
+        print("Install it with: uv sync --extra api")
+        return 1
+
     print("Update API Mode")
     print("=" * 40)
 
@@ -726,7 +741,14 @@ def run_update_api_mode(
 
     # Check API connectivity
     print(f"Checking API connectivity: {api_settings.api_url}")
-    api_client = ErpApiClient(api_settings)
+    shared_settings = SharedApiSettings(
+        api_url=api_settings.api_url,
+        api_email=api_settings.api_email,
+        api_password=api_settings.api_password,
+        api_company_id=api_settings.api_company_id,
+        api_bank_account_id=api_settings.api_bank_account_id,
+    )
+    api_client = ErpApiClient(shared_settings)
     ping_result = api_client.ping()
     if ping_result.success:
         print("[API-MODE] API connection OK")

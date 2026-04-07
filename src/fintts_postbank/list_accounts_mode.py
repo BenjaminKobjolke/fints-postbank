@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from fintts_postbank.client import create_client
+from fintts_postbank.client import create_and_bootstrap_client
 from fintts_postbank.config import (
     IBAN,
     save_client_state,
 )
 from fintts_postbank.operations import fetch_accounts
-from fintts_postbank.tan import handle_tan_challenge, interactive_cli_bootstrap
+from fintts_postbank.tan import handle_tan_challenge
 
 
 def run_list_accounts_mode(account_name: str | None = None) -> int:
@@ -36,12 +36,8 @@ def run_list_accounts_mode(account_name: str | None = None) -> int:
     configured_iban = account.iban if account is not None else IBAN
     acct_label = account.name if account is not None else None
 
-    # Create FinTS client
-    client = create_client(account=account)
-
-    # Bootstrap TAN mechanisms
-    print("\nInitializing TAN mechanisms...")
-    interactive_cli_bootstrap(client, force_tan_selection=False, account=account)
+    # Create FinTS client and bootstrap TAN mechanisms
+    client = create_and_bootstrap_client(account=account)
 
     try:
         with client:

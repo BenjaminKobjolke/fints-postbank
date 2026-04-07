@@ -2,9 +2,8 @@
 
 import sys
 
-from fintts_postbank.client import create_client, run_session
+from fintts_postbank.client import create_and_bootstrap_client, run_session
 from fintts_postbank.config import AccountConfig, discover_accounts, select_account
-from fintts_postbank.tan import interactive_cli_bootstrap
 
 
 def _parse_account_arg() -> str | None:
@@ -81,16 +80,10 @@ def run_console_mode(
     try:
         first_run = True
         while True:
-            # Create client
-            client = create_client(account=account)
-
-            # Bootstrap TAN mechanisms (required before with client:)
-            # Only force TAN selection on first run if --tan was passed
-            print("\nInitializing TAN mechanisms...")
-            interactive_cli_bootstrap(
-                client,
-                force_tan_selection=force_tan_selection and first_run,
+            # Create client and bootstrap TAN mechanisms
+            client = create_and_bootstrap_client(
                 account=account,
+                force_tan_selection=force_tan_selection and first_run,
             )
             first_run = False
 
@@ -106,7 +99,8 @@ def run_console_mode(
 
     except ValueError as e:
         print(f"\nConfiguration error: {e}")
-        print("Please ensure .env file exists with FINTS_USERNAME and FINTS_PASSWORD")
+        env_hint = f".env.{account.name}" if account is not None else ".env"
+        print(f"Please ensure {env_hint} file exists with FINTS_USERNAME and FINTS_PASSWORD")
     except Exception as e:
         print(f"\nError: {e}")
         raise

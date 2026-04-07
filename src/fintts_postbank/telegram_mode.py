@@ -9,10 +9,9 @@ from typing import TYPE_CHECKING, Any
 from telegram_bot import TelegramBot  # type: ignore[import-untyped]
 from telegram_bot.config import Settings as TelegramBotSettings  # type: ignore[import-untyped]
 
-from fintts_postbank.client import create_client, run_session
+from fintts_postbank.client import create_and_bootstrap_client, run_session
 from fintts_postbank.config import discover_accounts, get_telegram_settings, select_account
 from fintts_postbank.io import TelegramAdapter, TelegramAdapterTimeoutError
-from fintts_postbank.tan import interactive_cli_bootstrap
 
 if TYPE_CHECKING:
     from fintts_postbank.config import AccountConfig
@@ -118,6 +117,7 @@ class TelegramSessionManager:
             print(f"[SESSION] Session timed out for chat_id={chat_id}")
         except ValueError as e:
             adapter.output(f"\nConfiguration error: {e}")
+            adapter.output("Send /start to try again.")
             print(f"[SESSION] Config error for chat_id={chat_id}: {e}")
         except Exception as e:
             adapter.output(f"\nError: {e}")
@@ -136,20 +136,15 @@ class TelegramSessionManager:
             adapter: The TelegramAdapter for I/O
         """
         adapter.output("Postbank FinTS Client")
-        adapter.output("Initializing TAN mechanisms...")
 
         # Main session loop (handles reconnection)
         needs_reconnect = True
         while needs_reconnect:
-            # Create client
-            client = create_client(adapter, account=self.account)
-
-            # Bootstrap TAN mechanisms
-            interactive_cli_bootstrap(
-                client,
-                force_tan_selection=self.force_tan_selection,
+            # Create client and bootstrap TAN mechanisms
+            client = create_and_bootstrap_client(
                 io=adapter,
                 account=self.account,
+                force_tan_selection=self.force_tan_selection,
             )
 
             # Run session

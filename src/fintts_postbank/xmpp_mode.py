@@ -9,10 +9,9 @@ from typing import TYPE_CHECKING
 from xmpp_bot import XmppBot  # type: ignore[import-untyped]
 from xmpp_bot.config import Settings as XmppBotSettings  # type: ignore[import-untyped]
 
-from fintts_postbank.client import create_client, run_session
+from fintts_postbank.client import create_and_bootstrap_client, run_session
 from fintts_postbank.config import discover_accounts, get_xmpp_settings, select_account
 from fintts_postbank.io import XmppAdapter, XmppAdapterTimeoutError
-from fintts_postbank.tan import interactive_cli_bootstrap
 
 if TYPE_CHECKING:
     from slixmpp import Message  # type: ignore[import-untyped]
@@ -137,6 +136,7 @@ class XmppSessionManager:
             print(f"[SESSION] Session timed out for jid={jid}")
         except ValueError as e:
             adapter.output(f"\nConfiguration error: {e}")
+            adapter.output("Send /start to try again.")
             print(f"[SESSION] Config error for jid={jid}: {e}")
         except Exception as e:
             adapter.output(f"\nError: {e}")
@@ -155,20 +155,15 @@ class XmppSessionManager:
             adapter: The XmppAdapter for I/O
         """
         adapter.output("Postbank FinTS Client")
-        adapter.output("Initializing TAN mechanisms...")
 
         # Main session loop (handles reconnection)
         needs_reconnect = True
         while needs_reconnect:
-            # Create client
-            client = create_client(adapter, account=self.account)
-
-            # Bootstrap TAN mechanisms
-            interactive_cli_bootstrap(
-                client,
-                force_tan_selection=self.force_tan_selection,
+            # Create client and bootstrap TAN mechanisms
+            client = create_and_bootstrap_client(
                 io=adapter,
                 account=self.account,
+                force_tan_selection=self.force_tan_selection,
             )
 
             # Run session

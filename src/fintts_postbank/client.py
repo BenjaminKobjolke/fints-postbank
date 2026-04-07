@@ -11,6 +11,7 @@ from fintts_postbank.config import (
     HBCI_URL,
     IBAN,
     PRODUCT_ID,
+    clear_client_state,
     get_settings,
     load_client_state,
     save_client_state,
@@ -63,7 +64,7 @@ def create_client(
 
     # Try to load saved session state
     if saved_state:
-        _output(io, "Loading saved session state...")
+        print("Loading saved session state...")
 
     client = FinTS3PinTanClient(
         bank_identifier=blz,
@@ -74,6 +75,50 @@ def create_client(
         from_data=saved_state,
     )
 
+    return client
+
+
+def create_and_bootstrap_client(
+    io: IOAdapter | None = None,
+    account: AccountConfig | None = None,
+    force_tan_selection: bool = False,
+) -> FinTS3PinTanClient:
+    """Create a FinTS client and bootstrap TAN mechanisms, with stale-session retry.
+
+    If TAN mechanism initialization fails and a saved session was used,
+    clears the stale session and retries with a fresh connection.
+
+    Args:
+        io: Optional IOAdapter for I/O operations.
+        account: Optional AccountConfig for multi-account support.
+        force_tan_selection: If True, force manual TAN selection.
+
+    Returns:
+        Configured FinTS client with TAN mechanisms ready.
+    """
+    from fintts_postbank.tan import interactive_cli_bootstrap
+
+    account_name = account.name if account is not None else None
+    had_saved_state = load_client_state(account_name) is not None
+
+    client = create_client(io, account)
+
+    try:
+        interactive_cli_bootstrap(
+            client, force_tan_selection=force_tan_selection, io=io, account=account
+        )
+        return client
+    except ValueError as e:
+        if "No TAN mechanisms available" not in str(e) or not had_saved_state:
+            raise
+
+    # Stale session — clear and retry once with fresh connection
+    _output(io, "Stale session detected, retrying with fresh connection...")
+    clear_client_state(account_name)
+    client = create_client(io, account)
+    interactive_cli_bootstrap(
+        client, force_tan_selection=force_tan_selection, io=io, account=account
+    )
     return client
 
 
