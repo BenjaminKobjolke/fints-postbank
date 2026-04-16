@@ -9,11 +9,14 @@ from fints.hhd.flicker import terminal_flicker_unix  # type: ignore[import-untyp
 
 from fintts_postbank.config import Settings, get_settings, save_tan_preferences
 from fintts_postbank.io.helpers import io_input, io_output
+from fintts_postbank.logger import get_logger
 from fintts_postbank.ui import get_valid_choice
 
 if TYPE_CHECKING:
     from fintts_postbank.config import AccountConfig
     from fintts_postbank.io import IOAdapter
+
+logger = get_logger(__name__)
 
 
 def _try_use_saved_preferences(
@@ -34,10 +37,18 @@ def _try_use_saved_preferences(
         True if saved preferences were used, False otherwise.
     """
     if not settings.tan_mechanism or not settings.tan_mechanism_name:
+        logger.debug("No saved TAN preferences found")
         return False
+
+    logger.info(
+        "Trying saved preferences: mechanism=%s (%s), medium=%s",
+        settings.tan_mechanism, settings.tan_mechanism_name, settings.tan_medium,
+    )
+    logger.debug("Available mechanisms: %s", list(mechanisms.keys()))
 
     # Check if saved mechanism is still available
     if settings.tan_mechanism not in mechanisms:
+        logger.warning("Saved mechanism %s not in available mechanisms", settings.tan_mechanism)
         io_output(io, f"Saved TAN mechanism {settings.tan_mechanism} no longer available.")
         return False
 
@@ -48,23 +59,35 @@ def _try_use_saved_preferences(
     chosen_mechanism = mechanisms[settings.tan_mechanism]
     needs_medium = getattr(chosen_mechanism, "needs_tan_medium", None)
     supported_media = getattr(chosen_mechanism, "supported_media_number", 0)
+    logger.debug("Mechanism needs_medium=%s, supported_media=%s", needs_medium, supported_media)
 
     if (needs_medium or supported_media > 0) and settings.tan_medium:
         media = client.get_tan_media()
+        available_names = [
+            getattr(m, "tan_medium_name", str(m)) for m in media[1]
+        ]
+        logger.info("Available media: %s", available_names)
+
         # Find matching medium
         for medium in media[1]:
             medium_name = getattr(medium, "tan_medium_name", str(medium))
             if medium_name == settings.tan_medium:
                 client.set_tan_medium(medium)
+                logger.info("Saved preferences applied successfully")
                 # Log what's being used (console only, not Telegram)
                 print(f"Using: {settings.tan_mechanism_name} - {settings.tan_medium}")
                 return True
 
         # Medium not found, need to re-select
+        logger.warning(
+            "Saved medium '%s' not found in available media: %s",
+            settings.tan_medium, available_names,
+        )
         io_output(io, f"Saved TAN medium '{settings.tan_medium}' no longer available.")
         return False
 
     # Log what's being used (console only, not Telegram)
+    logger.info("Saved preferences applied (no medium needed)")
     print(f"Using: {settings.tan_mechanism_name}")
     return True
 
@@ -161,13 +184,18 @@ def interactive_cli_bootstrap(
     """
     # Determine env_path for loading/saving settings
     env_path = account.env_path if account is not None else None
+    acct_name = account.name if account is not None else "default"
+    logger.info("Interactive CLI bootstrap for account=%s, force_tan=%s", acct_name, force_tan_selection)
 
     # Fetch TAN mechanisms from bank if not already cached
     if not client.get_tan_mechanisms():
+        logger.info("No cached mechanisms, fetching from bank")
         client.fetch_tan_mechanisms()
 
     mechanisms = client.get_tan_mechanisms()
+    logger.info("Available TAN mechanisms: %s", {k: getattr(v, "name", str(v)) for k, v in mechanisms.items()})
     if len(mechanisms) == 0:
+        logger.error("No TAN mechanisms available")
         raise ValueError("No TAN mechanisms available")
 
     # Load saved preferences
@@ -178,6 +206,7 @@ def interactive_cli_bootstrap(
         if _try_use_saved_preferences(client, settings, mechanisms, io):
             return
 
+    logger.info("Manual TAN selection required")
     # Manual selection flow
     mech_key, mech_name, chosen_mechanism = _select_tan_mechanism(
         client, mechanisms, io
@@ -192,6 +221,7 @@ def interactive_cli_bootstrap(
         medium_name = _select_tan_medium(client, io)
 
     # Save preferences for next time
+    logger.info("Saving TAN preferences: mechanism=%s (%s), medium=%s", mech_key, mech_name, medium_name)
     save_tan_preferences(mech_key, mech_name, medium_name, env_path)
     io_output(io, "TAN preferences saved.")
 
@@ -213,6 +243,8 @@ def handle_tan_challenge(
         The TAN entered by user, or empty string for decoupled confirmation.
     """
     challenge = response.challenge
+    logger.info("TAN challenge received, decoupled=%s", bool(response.challenge_hhduc))
+    logger.debug("Challenge text: %s", challenge)
     io_output(io, "\nTAN Challenge:")
 
     if challenge:
@@ -220,6 +252,7 @@ def handle_tan_challenge(
 
     # Check if this is a decoupled TAN (like BestSign)
     if response.challenge_hhduc:
+        logger.info("Decoupled TAN (BestSign) — waiting for app confirmation")
         io_output(io, "\nPlease confirm this transaction in your BestSign app.")
         io_input(io, "Press Enter after confirming...")
         return ""

@@ -17,6 +17,7 @@ from fintts_postbank.config import (
     save_client_state,
 )
 from fintts_postbank.io.helpers import io_output
+from fintts_postbank.logger import get_logger
 from fintts_postbank.menu import run_menu_loop
 from fintts_postbank.operations import fetch_accounts, find_account_by_iban
 from fintts_postbank.tan import handle_tan_challenge
@@ -24,6 +25,8 @@ from fintts_postbank.tan import handle_tan_challenge
 if TYPE_CHECKING:
     from fintts_postbank.config import AccountConfig
     from fintts_postbank.io import IOAdapter
+
+logger = get_logger(__name__)
 
 
 def create_client(
@@ -43,12 +46,14 @@ def create_client(
     """
     # Use account-specific settings if provided
     if account is not None:
+        logger.info("Creating client for account: %s", account.name)
         settings = get_settings(account.env_path)
         blz = account.blz
         hbci_url = account.hbci_url
         product_id = account.product_id
         saved_state = load_client_state(account.name)
     else:
+        logger.info("Creating client with default settings")
         settings = get_settings()
         blz = BLZ
         hbci_url = HBCI_URL
@@ -57,7 +62,10 @@ def create_client(
 
     # Try to load saved session state
     if saved_state:
+        logger.info("Loaded saved session state (%d bytes)", len(saved_state))
         print("Loading saved session state...")
+    else:
+        logger.info("No saved session state found")
 
     client = FinTS3PinTanClient(
         bank_identifier=blz,
@@ -93,6 +101,10 @@ def create_and_bootstrap_client(
 
     account_name = account.name if account is not None else None
     had_saved_state = load_client_state(account_name) is not None
+    logger.info(
+        "Bootstrap: account=%s, had_saved_state=%s, force_tan=%s",
+        account_name, had_saved_state, force_tan_selection,
+    )
 
     client = create_client(io, account)
 
@@ -100,18 +112,22 @@ def create_and_bootstrap_client(
         interactive_cli_bootstrap(
             client, force_tan_selection=force_tan_selection, io=io, account=account
         )
+        logger.info("Bootstrap completed successfully")
         return client
     except ValueError as e:
+        logger.warning("Bootstrap failed: %s", e)
         if "No TAN mechanisms available" not in str(e) or not had_saved_state:
             raise
 
     # Stale session — clear and retry once with fresh connection
+    logger.info("Stale session detected, clearing and retrying")
     io_output(io, "Stale session detected, retrying with fresh connection...")
     clear_client_state(account_name)
     client = create_client(io, account)
     interactive_cli_bootstrap(
         client, force_tan_selection=force_tan_selection, io=io, account=account
     )
+    logger.info("Bootstrap retry completed successfully")
     return client
 
 
@@ -137,8 +153,12 @@ def run_session(
     with client:
         # Handle initialization TAN if needed (PSD2 requirement)
         if client.init_tan_response:
+            logger.info("Init TAN required (PSD2)")
             tan = handle_tan_challenge(client.init_tan_response, io)
             client.send_tan(client.init_tan_response, tan)
+            logger.info("Init TAN completed")
+        else:
+            logger.info("No init TAN required")
 
         # Fetch accounts
         accounts = fetch_accounts(client, io)
@@ -162,5 +182,6 @@ def run_session(
     # Save session state for faster next startup
     session_data = client.deconstruct()
     save_client_state(session_data, account_name)
+    logger.info("Session state saved (%d bytes) for account=%s", len(session_data), account_name)
 
     return needs_reconnect

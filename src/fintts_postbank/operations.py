@@ -9,10 +9,13 @@ from typing import TYPE_CHECKING, Any
 from fints.client import FinTS3PinTanClient, NeedTANResponse  # type: ignore[import-untyped]
 
 from fintts_postbank.io.helpers import io_output
+from fintts_postbank.logger import get_logger
 from fintts_postbank.tan import handle_tan_challenge
 
 if TYPE_CHECKING:
     from fintts_postbank.io import IOAdapter
+
+logger = get_logger(__name__)
 
 
 def fetch_accounts(
@@ -28,19 +31,24 @@ def fetch_accounts(
     Returns:
         List of SEPA account objects.
     """
+    logger.info("Fetching SEPA accounts")
     print("Fetching SEPA accounts...")
 
     response = client.get_sepa_accounts()
+    logger.debug("get_sepa_accounts returned: %s", type(response).__name__)
 
     # Handle TAN if required
     while isinstance(response, NeedTANResponse):
+        logger.info("TAN required for account fetch")
         tan = handle_tan_challenge(response, io)
         response = client.send_tan(response, tan)
 
     accounts: list[Any] = list(response)
 
+    logger.info("Found %d account(s)", len(accounts))
     print(f"Found {len(accounts)} account(s)")
     for acc in accounts:
+        logger.debug("Account: IBAN=%s, BIC=%s", acc.iban, acc.bic)
         print(f"  - IBAN: {acc.iban}, BIC: {acc.bic}")
 
     return accounts
@@ -65,21 +73,27 @@ def fetch_transactions(
     Returns:
         List of transaction objects.
     """
+    logger.info("Fetching transactions from %s to %s", start_date, end_date)
     print(f"Fetching transactions from {start_date} to {end_date}...")
 
+    logger.debug("Calling get_transactions...")
     print("[FINTS] Calling get_transactions...")
     response = client.get_transactions(account, start_date, end_date)
+    logger.info("get_transactions returned: %s", type(response).__name__)
     print(f"[FINTS] get_transactions returned: {type(response).__name__}")
 
     # Handle TAN if required
     while isinstance(response, NeedTANResponse):
+        logger.info("TAN required for transactions")
         print("[FINTS] TAN required for transactions")
         tan = handle_tan_challenge(response, io)
         response = client.send_tan(response, tan)
+        logger.info("After TAN, response type: %s", type(response).__name__)
         print(f"[FINTS] After TAN, response type: {type(response).__name__}")
 
     print("[FINTS] Converting response to list...")
     transactions: list[Any] = list(response) if response else []
+    logger.info("Found %d transaction(s)", len(transactions))
     print(f"[FINTS] Converted {len(transactions)} transactions")
     print(f"Found {len(transactions)} transaction(s)")
 
@@ -101,15 +115,19 @@ def fetch_balance(
     Returns:
         Balance information.
     """
+    logger.info("Fetching account balance")
     print("Fetching account balance...")
 
     response = client.get_balance(account)
+    logger.debug("get_balance returned: %s", type(response).__name__)
 
     # Handle TAN if required
     while isinstance(response, NeedTANResponse):
+        logger.info("TAN required for balance")
         tan = handle_tan_challenge(response, io)
         response = client.send_tan(response, tan)
 
+    logger.info("Balance fetched: %s", response)
     return response
 
 

@@ -44,8 +44,11 @@ htmlcov/
 
 # Logs
 *.log
+logs/
 .claude
 code_analysis_results/
 /nul
 .env.xida_forecast_api
 .env.xida_erp_localhost
+claude-plans
+logs

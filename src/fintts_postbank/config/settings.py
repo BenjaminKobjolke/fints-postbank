@@ -1,11 +1,15 @@
 """Environment-based settings for FinTS authentication."""
 
+import logging
 import os
+import re
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 from dotenv import dotenv_values, load_dotenv
+
+logger = logging.getLogger("fintts_postbank.config.settings")
 
 # Cache parsed env files to avoid repeated parsing (and repeated warnings)
 _dotenv_cache: dict[Path, dict[str, str | None]] = {}
@@ -295,6 +299,56 @@ def get_bot_update_settings(env_path: Path | None = None) -> BotUpdateSettings:
     )
 
 
+def _parse_date_value(value: str) -> date | None:
+    """Parse a date value that can be absolute (YYYY-MM-DD) or relative.
+
+    Supported relative formats:
+        N-days-ago, N-weeks-ago, N-months-ago
+
+    Args:
+        value: Date string to parse.
+
+    Returns:
+        Parsed date, or None if the format is invalid.
+    """
+    value = value.strip()
+
+    # Try absolute date first
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        pass
+
+    # Try relative format: N-days-ago, N-weeks-ago, N-months-ago
+    match = re.match(r"^(\d+)-(days?|weeks?|months?)-ago$", value, re.IGNORECASE)
+    if not match:
+        return None
+
+    amount = int(match.group(1))
+    unit = match.group(2).lower().rstrip("s")  # normalize: "months" -> "month"
+    today = date.today()
+
+    if unit == "day":
+        return today - timedelta(days=amount)
+    if unit == "week":
+        return today - timedelta(weeks=amount)
+    if unit == "month":
+        # Subtract months by adjusting year/month
+        month = today.month - amount
+        year = today.year
+        while month < 1:
+            month += 12
+            year -= 1
+        # Clamp day to valid range for target month
+        import calendar
+
+        max_day = calendar.monthrange(year, month)[1]
+        day = min(today.day, max_day)
+        return date(year, month, day)
+
+    return None
+
+
 def get_api_settings(env_path: Path | None = None) -> ApiSettings:
     """Load API settings from environment variables.
 
@@ -360,14 +414,13 @@ def get_api_settings(env_path: Path | None = None) -> ApiSettings:
                 f"TELEGRAM_TARGET_USER_ID must be an integer, got: {telegram_target_user_id_str}"
             ) from err
 
-    # Parse transaction start date (YYYY-MM-DD format)
-    try:
-        transaction_start_date = date.fromisoformat(transaction_start_date_str)  # type: ignore[arg-type]
-    except ValueError as err:
+    # Parse transaction start date (YYYY-MM-DD or relative like "2-months-ago")
+    transaction_start_date = _parse_date_value(transaction_start_date_str)  # type: ignore[arg-type]
+    if transaction_start_date is None:
         raise ValueError(
-            f"TRANSACTION_START_DATE must be in YYYY-MM-DD format, "
+            f"TRANSACTION_START_DATE must be YYYY-MM-DD or N-days-ago / N-months-ago, "
             f"got: {transaction_start_date_str}"
-        ) from err
+        )
 
     return ApiSettings(
         api_url=api_url,  # type: ignore[arg-type]
@@ -409,6 +462,10 @@ def save_tan_preferences(
         env_path: Optional specific .env file to write to.
     """
     target_path = _get_env_path(env_path)
+    logger.info(
+        "Saving TAN preferences to %s: mechanism=%s, name=%s, medium=%s",
+        target_path, mechanism, mechanism_name, medium,
+    )
 
     # Read existing content
     if target_path.exists():
@@ -425,12 +482,21 @@ def save_tan_preferences(
     if medium:
         updates["FINTS_TAN_MEDIUM"] = medium
 
+    # Variables to remove when medium is not needed
+    removals: set[str] = set()
+    if not medium:
+        removals.add("FINTS_TAN_MEDIUM")
+
     # Track which variables were updated
     updated_vars: set[str] = set()
 
     # Update existing lines
     new_lines = []
     for line in lines:
+        # Remove stale variables
+        if any(line.startswith(f"{var}=") for var in removals):
+            continue
+
         updated = False
         for var_name, var_value in updates.items():
             if line.startswith(f"{var_name}="):
@@ -448,6 +514,10 @@ def save_tan_preferences(
 
     # Write back
     target_path.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
+
+    # Invalidate cache so subsequent reads see updated values
+    if target_path in _dotenv_cache:
+        del _dotenv_cache[target_path]
 
 
 def _get_session_path(account_name: str | None = None) -> Path:
@@ -471,6 +541,7 @@ def save_client_state(data: bytes, account_name: str | None = None) -> None:
     """
     session_path = _get_session_path(account_name)
     session_path.write_bytes(data)
+    logger.info("Saved client state to %s (%d bytes)", session_path, len(data))
 
 
 def load_client_state(account_name: str | None = None) -> bytes | None:
@@ -484,7 +555,10 @@ def load_client_state(account_name: str | None = None) -> bytes | None:
     """
     session_path = _get_session_path(account_name)
     if session_path.exists():
-        return session_path.read_bytes()
+        data = session_path.read_bytes()
+        logger.info("Loaded client state from %s (%d bytes)", session_path, len(data))
+        return data
+    logger.info("No client state at %s", session_path)
     return None
 
 

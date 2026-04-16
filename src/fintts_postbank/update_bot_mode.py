@@ -19,6 +19,7 @@ from fintts_postbank.config import (
     get_settings,
     get_telegram_settings,
     get_xmpp_settings,
+    save_client_state,
     select_account,
 )
 from fintts_postbank.io import (
@@ -338,6 +339,10 @@ def _run_fints_session(
                     )
                 else:
                     print("[BOT-MODE] No new transactions")
+
+        # Save session state for faster next startup
+        acct_label = account.name if account is not None else None
+        save_client_state(client.deconstruct(), acct_label)
 
         # Check if balance changed compared to last sync
         previous_balance = tx_db.get_last_balance(fints_settings.username)

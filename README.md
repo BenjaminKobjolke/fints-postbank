@@ -13,6 +13,9 @@ FinTS client for Postbank banking operations using the python-fints library.
 - Telegram and XMPP bot notifications for balance changes
 - Automated update modes (`--update-bot`, `--update-api`)
 - Bot connection test mode (`--test-bot`)
+- List TAN mechanisms mode (`--list-tan`)
+- Relative date support for `TRANSACTION_START_DATE` (e.g., `2-months-ago`)
+- Per-account rotating debug logs
 
 ## Requirements
 
@@ -187,6 +190,14 @@ Run: `fints-postbank --list-accounts` or with a specific account: `fints-postban
 
 The currently configured IBAN (from `.env`) is marked with an asterisk (`*`).
 
+## List TAN Mode (--list-tan)
+
+Connects to the bank via FinTS and displays all available TAN mechanisms and media for the selected account. Useful for verifying or troubleshooting TAN configuration in your `.env` file.
+
+Run: `fints-postbank --list-tan` or `list-tan.bat --account postbank`
+
+The currently configured mechanism and medium (from `.env`) are marked with an asterisk (`*`).
+
 ## API Mode (--update-api)
 
 Automated mode that fetches bank data and posts it to an external API. Useful for syncing transactions to your own finance tracking system.
@@ -200,8 +211,15 @@ API_URL=http://localhost/api   # Your API base URL
 API_USER=your_api_user
 API_PASSWORD=your_api_password
 TELEGRAM_TARGET_USER_ID=123456789  # User to receive TAN prompts
-TRANSACTION_START_DATE=2024-01-01  # Sync transactions from this date
+TRANSACTION_START_DATE=2-months-ago  # Sync transactions from this date
 ```
+
+`TRANSACTION_START_DATE` supports absolute dates (`YYYY-MM-DD`) and relative formats:
+- `N-days-ago` (e.g., `30-days-ago`)
+- `N-weeks-ago` (e.g., `4-weeks-ago`)
+- `N-months-ago` (e.g., `2-months-ago`)
+
+**Note:** Under PSD2, date ranges beyond 90 days may require TAN (Strong Customer Authentication) for every transaction fetch. Use a shorter range to avoid repeated TAN prompts.
 
 Run: `fints-postbank --update-api`
 
@@ -270,6 +288,14 @@ http_response_code(201);
 echo json_encode(['success' => true]);
 ```
 
+## Logging
+
+Per-account rotating log files are written to `logs/<account_name>/fints.log` (e.g., `logs/xida/fints.log`, `logs/nr/fints.log`). Logs capture TAN handling, session state, and FinTS operations at DEBUG level.
+
+- Rotating files: 5 MB per file, 3 backups
+- Created automatically on first run
+- Useful for comparing behavior between accounts
+
 ## Development
 
 Run tests:
@@ -289,6 +315,9 @@ fintts-postbank/
 ├── src/fintts_postbank/
 │   ├── __init__.py
 │   ├── main.py              # Entry point
+│   ├── logger.py            # Per-account rotating log setup
+│   ├── list_tan_mode.py     # --list-tan mode
+│   ├── list_accounts_mode.py # --list-accounts mode
 │   └── config/
 │       ├── __init__.py
 │       ├── accounts.py      # Multi-account discovery & selection
@@ -296,11 +325,14 @@ fintts-postbank/
 │       └── constants.py     # Bank constants
 ├── tests/
 │   └── test_config.py
+├── logs/                    # Per-account log directories (gitignored)
 ├── pyproject.toml
 ├── install.bat
 ├── update.bat
 ├── start.bat
 ├── bot-mode.bat
+├── list-accounts.bat
+├── list-tan.bat
 └── tools/tests.bat
 ```
 

@@ -109,6 +109,7 @@ def run_console_mode(
 def main() -> None:
     """Main entry point."""
     from fintts_postbank.config import get_bot_mode
+    from fintts_postbank.logger import setup_logging
 
     # Parse command line arguments
     force_tan_selection = "--tan" in sys.argv
@@ -116,10 +117,14 @@ def main() -> None:
     update_bot_mode = "--update-bot" in sys.argv
     test_bot_mode = "--test-bot" in sys.argv
     list_accounts_mode = "--list-accounts" in sys.argv
+    list_tan_mode = "--list-tan" in sys.argv
     send_all = "--all" in sys.argv
     resync = "--resync" in sys.argv
     days_override = _parse_days_arg()
     account_name = _parse_account_arg()
+
+    # Initialize per-account logging
+    setup_logging(account_name)
 
     # Validate --all and --days are only used with --update-bot
     if (send_all or days_override is not None) and not update_bot_mode:
@@ -132,11 +137,17 @@ def main() -> None:
         sys.exit(1)
 
     # Validate mutually exclusive mode flags
-    mode_flags = [update_api_mode, update_bot_mode, test_bot_mode, list_accounts_mode]
+    mode_flags = [
+        update_api_mode,
+        update_bot_mode,
+        test_bot_mode,
+        list_accounts_mode,
+        list_tan_mode,
+    ]
     if sum(mode_flags) > 1:
         print(
-            "Error: --update-api, --update-bot, --test-bot, and --list-accounts"
-            " are mutually exclusive"
+            "Error: --update-api, --update-bot, --test-bot, --list-accounts,"
+            " and --list-tan are mutually exclusive"
         )
         sys.exit(1)
 
@@ -182,6 +193,10 @@ def main() -> None:
         from fintts_postbank.list_accounts_mode import run_list_accounts_mode
 
         sys.exit(run_list_accounts_mode(account_name=account_name))
+    elif list_tan_mode:
+        from fintts_postbank.list_tan_mode import run_list_tan_mode
+
+        sys.exit(run_list_tan_mode(account_name=account_name))
     elif bot_mode == "telegram":
         # Import here to avoid loading telegram dependencies in console mode
         from fintts_postbank.telegram_mode import run_telegram_mode
