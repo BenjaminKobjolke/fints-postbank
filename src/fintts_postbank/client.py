@@ -121,7 +121,7 @@ def create_and_bootstrap_client(
 
     # Stale session — clear and retry once with fresh connection
     logger.info("Stale session detected, clearing and retrying")
-    io_output(io, "Stale session detected, retrying with fresh connection...")
+    print("Stale session detected, retrying with fresh connection...")
     clear_client_state(account_name)
     client = create_client(io, account)
     interactive_cli_bootstrap(
