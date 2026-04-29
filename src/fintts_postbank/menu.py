@@ -11,6 +11,7 @@ from schwifty import BIC, IBAN  # type: ignore[import-untyped]
 
 from fintts_postbank.io.helpers import io_input, io_output
 from fintts_postbank.operations import (
+    VOPDeclinedError,
     execute_transfer,
     fetch_balance,
     fetch_transactions,
@@ -335,6 +336,9 @@ def run_menu_loop(
                     io=io,
                 )
                 print_transfer_result(response, io)
+            except VOPDeclinedError:
+                io_output(io, "Transfer cancelled (Verification of Payee declined).")
+                continue
             except Exception as e:
                 if is_dialog_error(e):
                     io_output(io, f"\nSession expired: {e}")
