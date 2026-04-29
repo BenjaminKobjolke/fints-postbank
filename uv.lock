@@ -323,8 +323,7 @@ dependencies = [
 
 [[package]]
 name = "fints"
-version = "5.0.0"
-source = { registry = "https://pypi.org/simple" }
+source = { editable = "../python-fints" }
 dependencies = [
     { name = "bleach" },
     { name = "enum-tools" },
@@ -333,9 +332,15 @@ dependencies = [
     { name = "requests" },
     { name = "sepaxml" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/6f/ed/461d0d227081d348c0e1d02f804cd25e5078875e68a98d579a4240ef3443/fints-5.0.0.tar.gz", hash = "sha256:d418a8d810522ab6335d03819710298902f258a146eea7acd3ad376620ae2416", size = 102259, upload-time = "2026-01-06T15:54:45.603Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/db/e7/5752a662ac5037f12e145fc24db2c38c549f0b6f7d3ff1b85c61182b7ee6/fints-5.0.0-py3-none-any.whl", hash = "sha256:6549507b7a81cfcbdbccadb1c8bfc17f6e882d4d1e9c2652dd050a54e25c2bf1", size = 89571, upload-time = "2026-01-06T15:54:40.82Z" },
+
+[package.metadata]
+requires-dist = [
+    { name = "bleach" },
+    { name = "enum-tools", specifier = "~=0.12.0" },
+    { name = "lxml", specifier = "~=6.0.2" },
+    { name = "mt-940" },
+    { name = "requests" },
+    { name = "sepaxml", specifier = "~=2.7" },
 ]
 
 [[package]]
@@ -364,7 +369,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "erp-api-client", marker = "extra == 'api'", git = "https://github.com/BenjaminKobjolke/erp-api-client.git" },
-    { name = "fints", specifier = ">=5.0.0" },
+    { name = "fints", editable = "../python-fints" },
     { name = "httpx", specifier = ">=0.27.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.10.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },

@@ -24,6 +24,7 @@ dev = [
 
 [tool.uv.sources]
 erp-api-client = { git = "https://github.com/BenjaminKobjolke/erp-api-client.git" }
+fints = { path = "D:\\GIT\\BenjaminKobjolke\\python-fints", editable = true }
 telegram-bot = { path = "D:\\GIT\\BenjaminKobjolke\\telegram-bot", editable = true }
 xmpp-bot = { path = "D:\\GIT\\BenjaminKobjolke\\xmpp-bot", editable = true }
 
