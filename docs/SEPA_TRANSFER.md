@@ -24,7 +24,9 @@ The interactive console mode supports sending SEPA bank transfers directly from 
 
 4. Review the **Transfer Summary** and confirm with `yes` or `y`.
 
-5. Complete the **TAN challenge** (e.g., confirm in your BestSign app) to authorize the transfer.
+5. If the bank's **Verification of Payee** check does not return a clean match, the CLI shows the bank-side result and asks `Confirm transfer despite name check result? (yes/no):`. Decline aborts the transfer.
+
+6. Complete the **TAN challenge** (e.g., confirm in your BestSign app) to authorize the transfer.
 
 ## Example
 
