@@ -114,6 +114,7 @@ def main() -> None:
     # Parse command line arguments
     force_tan_selection = "--tan" in sys.argv
     update_api_mode = "--update-api" in sys.argv
+    process_transfers_mode = "--process-transfers" in sys.argv
     update_bot_mode = "--update-bot" in sys.argv
     test_bot_mode = "--test-bot" in sys.argv
     list_accounts_mode = "--list-accounts" in sys.argv
@@ -139,6 +140,7 @@ def main() -> None:
     # Validate mutually exclusive mode flags
     mode_flags = [
         update_api_mode,
+        process_transfers_mode,
         update_bot_mode,
         test_bot_mode,
         list_accounts_mode,
@@ -146,8 +148,8 @@ def main() -> None:
     ]
     if sum(mode_flags) > 1:
         print(
-            "Error: --update-api, --update-bot, --test-bot, --list-accounts,"
-            " and --list-tan are mutually exclusive"
+            "Error: --update-api, --process-transfers, --update-bot, --test-bot,"
+            " --list-accounts, and --list-tan are mutually exclusive"
         )
         sys.exit(1)
 
@@ -173,6 +175,11 @@ def main() -> None:
         from fintts_postbank.update_api_mode import run_update_api_mode
 
         sys.exit(run_update_api_mode(account_name=account_name, resync=resync))
+    elif process_transfers_mode:
+        # Import here to avoid loading dependencies in other modes
+        from fintts_postbank.process_transfers_mode import run_process_transfers_mode
+
+        sys.exit(run_process_transfers_mode(account_name=account_name))
     elif update_bot_mode:
         # Import here to avoid loading dependencies in other modes
         from fintts_postbank.update_bot_mode import run_update_bot_mode
