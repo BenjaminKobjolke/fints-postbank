@@ -52,3 +52,10 @@ code_analysis_results/
 .env.xida_erp_localhost
 claude-plans
 logs
+
+# Git working files
+tmp/commit_msg.tmp
+PLAN.md
+HANDOFF.md
+/PLAN_*.md
+/tickets/
