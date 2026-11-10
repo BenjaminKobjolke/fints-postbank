@@ -21,3 +21,14 @@ def io_input(io: IOAdapter | None, prompt: str) -> str:
     if io is not None:
         return io.input(prompt)
     return input(prompt)
+
+
+def io_confirm(io: IOAdapter | None, prompt: str) -> bool:
+    """Ask yes/no; re-ask on anything else so a typo never counts as an answer."""
+    while True:
+        answer = io_input(io, prompt).strip().lower()
+        if answer in ("yes", "y"):
+            return True
+        if answer in ("no", "n"):
+            return False
+        io_output(io, "Please answer 'yes' or 'no'.")

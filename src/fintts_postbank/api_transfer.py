@@ -106,6 +106,12 @@ def process_pending_transfers(
             continue
         except Exception as exc:  # noqa: BLE001
             error_message = f"FinTS error: {exc}"
+            cause = exc.__cause__
+            if cause is not None:
+                # sepaxml wraps the xmlschema error; its reason/path name the bad field
+                reason = getattr(cause, "reason", None) or cause
+                path = getattr(cause, "path", None)
+                error_message += f" ({reason}{f' at {path}' if path else ''})"
             logger.exception("Transfer %d failed during execution", transfer.id)
             adapter.output(f"Transfer {transfer.id} FAILED: {error_message}")
             _patch_status(api_client, transfer.id, "failed", error_message, adapter)

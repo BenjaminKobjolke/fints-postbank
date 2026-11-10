@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any
 from fints.client import FinTS3PinTanClient  # type: ignore[import-untyped]
 from schwifty import BIC, IBAN  # type: ignore[import-untyped]
 
-from fintts_postbank.io.helpers import io_input, io_output
+from fintts_postbank.io.helpers import io_confirm, io_input, io_output
 from fintts_postbank.operations import (
     VOPDeclinedError,
     execute_transfer,
@@ -239,8 +239,7 @@ def confirm_transfer(
     io_output(io, f"Reason:      {details['reason']}")
     io_output(io, "------------------------")
 
-    confirmation = io_input(io, "\nConfirm transfer? (yes/no): ").strip().lower()
-    return confirmation in ("yes", "y")
+    return io_confirm(io, "\nConfirm transfer? (yes/no): ")
 
 
 def run_menu_loop(

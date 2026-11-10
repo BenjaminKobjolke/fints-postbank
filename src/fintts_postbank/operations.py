@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import date
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
@@ -12,9 +13,12 @@ from fints.client import (  # type: ignore[import-untyped]
     NeedVOPResponse,
 )
 
-from fintts_postbank.io.helpers import io_input, io_output
+from fintts_postbank.io.helpers import io_confirm, io_output
 from fintts_postbank.logger import get_logger
 from fintts_postbank.tan import handle_tan_challenge
+
+# pain.001 BICFI pattern from the SEPA XSD
+BIC_PATTERN = r"[A-Z0-9]{4}[A-Z]{2}[A-Z0-9]{2}([A-Z0-9]{3})?"
 
 
 class VOPDeclinedError(Exception):
@@ -260,12 +264,7 @@ def handle_vop_challenge(
     """
     io_output(io, "")
     io_output(io, _format_vop_result(response.vop_result))
-    answer = (
-        io_input(io, "Confirm transfer despite name check result? (yes/no): ")
-        .strip()
-        .lower()
-    )
-    return answer in ("yes", "y")
+    return io_confirm(io, "Confirm transfer despite name check result? (yes/no): ")
 
 
 def _log_vop_data(vop_result: Any, source: str) -> None:
@@ -371,12 +370,23 @@ def execute_transfer(
         VOPDeclinedError: If the user declines a Verification of Payee
             challenge issued by the bank.
     """
+    # sepaxml XSD rejects spaces/lowercase in IBAN/BIC and an empty <Ustrd>
+    recipient_iban = recipient_iban.replace(" ", "").upper()
+    recipient_bic = (recipient_bic or "").replace(" ", "").upper()
+    reason = reason.strip() or "NOTPROVIDED"
+    # BIC is optional in SEPA (IBAN-only); an invalid one fails the XSD, so drop it
+    if recipient_bic and not re.fullmatch(BIC_PATTERN, recipient_bic):
+        msg = f"Ignoring invalid recipient BIC '{recipient_bic}' (IBAN-only transfer)"
+        logger.warning(msg)
+        io_output(io, msg)
+        recipient_bic = ""
+
     print(f"Initiating SEPA transfer of {amount} EUR to {recipient_iban}...")
 
     response = client.simple_sepa_transfer(
         account=account,
         iban=recipient_iban,
-        bic=recipient_bic or "",
+        bic=recipient_bic,
         recipient_name=recipient_name,
         amount=amount,
         account_name=account.iban,
