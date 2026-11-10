@@ -22,7 +22,8 @@ The interactive console mode supports sending SEPA bank transfers directly from 
    - **Amount (EUR)** — positive number with up to 2 decimal places (use `.` or `,` as separator)
    - **Transfer reason/description** — optional
 
-4. Review the **Transfer Summary** and confirm with `yes` or `y`.
+4. Review the **Transfer Summary** and confirm with `yes`/`y` or decline with `no`/`n`.
+   Any other answer (e.g. `yea`) is not accepted and the question is asked again.
 
 5. If the bank's **Verification of Payee** check does not return a clean match, the CLI shows the bank-side result and asks `Confirm transfer despite name check result? (yes/no):`. Decline aborts the transfer.
 
@@ -53,7 +54,7 @@ Confirm transfer? (yes/no): yes
 
 ## Cancellation
 
-Type `cancel` at any input prompt to abort the transfer. You can also decline at the confirmation step by entering anything other than `yes`/`y`.
+Type `cancel` at any input prompt to abort the transfer. You can also decline at the confirmation step by entering `no` or `n`.
 
 Transfers are never stored as the "last action" in the menu, so pressing Enter cannot accidentally repeat a transfer.
 
@@ -65,8 +66,22 @@ Transfers are never stored as the "last action" in the menu, so pressing Enter c
 
 Invalid input is rejected with an error message and the prompt is repeated.
 
+### Normalization before sending
+
+`execute_transfer` (`src/fintts_postbank/operations.py`) cleans the values
+before the SEPA XML (pain.001) is built, so the XSD check in `sepaxml`
+does not reject them. This applies to console and
+[`--process-transfers`](TRANSFER_API_MODE.md) alike:
+
+- **IBAN / BIC** — spaces removed, uppercased
+- **Empty reason** — replaced with `NOTPROVIDED`
+- **Invalid BIC** — a BIC that does not match the SEPA pattern
+  `[A-Z0-9]{4}[A-Z]{2}[A-Z0-9]{2}([A-Z0-9]{3})?` is dropped and the
+  transfer is sent IBAN-only (allowed in SEPA). A warning is shown:
+  `Ignoring invalid recipient BIC '<value>' (IBAN-only transfer)`
+
 ## Security
 
 - Transfers require explicit confirmation of the details summary before the bank is contacted
 - The bank then requires a separate TAN confirmation (BestSign, photoTAN, etc.)
-- No transfer can be triggered by pressing Enter alone
+- No transfer can be triggered by pressing Enter alone or by an unclear answer — only `yes`/`y` confirms

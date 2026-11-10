@@ -38,13 +38,15 @@ For every transfer the API returns with status `pending`:
 2. **Summary** — bot prints the source IBAN, recipient IBAN/BIC/name,
    amount, and reason.
 3. **Confirmation** — bot asks `Confirm transfer? (yes/no):`. Reply `yes`
-   or `y` to execute. Anything else skips this transfer.
+   or `y` to execute, `no` or `n` to skip. Any other reply (e.g. `yea`) is
+   not accepted and the bot asks again.
 4. **Verification of Payee (Namensabgleich)** — if the bank's name check
    does not return a clean match, the bot shows the bank-side result
    (`RVMC` partial / `RVNM` no match / `RVNA` not available) along with
    the bank's recorded name when supplied, and asks
-   `Confirm transfer despite name check result? (yes/no):`. Decline leaves
-   the transfer pending.
+   `Confirm transfer despite name check result? (yes/no):`. Same answers
+   as step 3. Decline leaves the transfer pending. If the bank sends only
+   its warning without a result code, the code is shown as `?`.
 5. **TAN challenge** — on confirmation, the bot relays the FinTS TAN
    prompt (e.g. BestSign, photoTAN). Authorize as usual.
 6. **Status update** — the bot PATCHes the API:
@@ -55,7 +57,7 @@ For every transfer the API returns with status `pending`:
 
 ## Decline Behaviour
 
-If you reply anything other than `yes` / `y`:
+If you reply `no` / `n`:
 
 - The transfer stays `pending` in the API.
 - No PATCH is sent.
@@ -70,24 +72,28 @@ level, dialog error, …) the bot:
 
 1. Prints the failure to chat.
 2. PATCHes `status=failed` with the FinTS response text as `error_message`
-   on the API record.
+   on the API record. For SEPA XML validation errors the message also names
+   the failing rule and field, e.g.
+   `(value doesn't match any pattern of [...] at /Document/.../BICFI)`.
 3. Continues with the next pending transfer.
 
 The API allows manually transitioning `failed` → `pending` if you want to
-retry later.
+retry later (API frontend, or `ErpApiClient.update_transfer_status(id, "pending")`).
 
 ## Validation
 
 The ERP API frontend validates IBAN, BIC, amount, and description before
 queuing a transfer (same rules as [`SEPA_TRANSFER.md`](SEPA_TRANSFER.md)).
-This mode trusts those values and does not re-validate them client-side.
+This mode does not re-validate them, but `execute_transfer` normalizes
+IBAN/BIC, fills an empty reason and drops an invalid BIC before sending.
+See [Normalization before sending](SEPA_TRANSFER.md#normalization-before-sending).
 
 ## Security
 
 - No transfer can be triggered without the explicit `yes` confirmation in
   chat **and** a separate TAN authorization at the bank.
-- Pressing Enter or replying anything other than `yes` / `y` skips the
-  transfer.
+- Only `yes` / `y` executes. `no` / `n` skips. Any other reply is asked
+  again, so a typo never counts as an answer.
 - The FinTS session is closed and saved at the end of the run.
 
 ## Exit Codes
